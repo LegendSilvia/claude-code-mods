@@ -1,7 +1,12 @@
 {
   "name": "claude-code-mods",
-  "owner": { "name": "LegendSilvia", "url": "https://github.com/LegendSilvia" },
-  "metadata": { "description": "Stylish HUD mods for the Claude Code terminal: limit rings and animated progress bars" },
+  "owner": {
+    "name": "LegendSilvia",
+    "url": "https://github.com/LegendSilvia"
+  },
+  "metadata": {
+    "description": "Stylish HUD mods for the Claude Code terminal: limit rings, animated progress bars and highlighted replies"
+  },
   "plugins": [
     {
       "name": "limit-bars",
@@ -12,6 +17,11 @@
       "name": "plan-progress-fx",
       "source": "./plugins/plan-progress-fx",
       "description": "Animated rainbow plan progress bars under the prompt, beside the limit rings"
+    },
+    {
+      "name": "reply-highlight",
+      "source": "./plugins/reply-highlight",
+      "description": "Sets Claude's replies apart in the transcript: a violet edge and a faint tinted panel"
     }
   ]
 }

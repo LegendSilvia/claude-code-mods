@@ -9,8 +9,9 @@ Stylish HUD mods for the Claude Code terminal, drawn under the prompt.
 | --- | --- |
 | **limit-bars** | Four braille rings, filled clockwise with the percentage inside: **context** (green → amber → red), **session** 5-hour limit (cyan → violet), **weekly** limit (pink → orange) and **Fable** weekly limit (mint → blue). A light orbits each filled arc; a ring pulses red past 80% (context) or 90% (limits). Beside them: model with its effort level (italic, shading violet → pink from low to max), workspace folder and tokens used. |
 | **plan-progress-fx** | Animated rainbow progress bars for multi-step tasks, with gradient titles and percentages, placed to the right of the rings. On a narrow terminal they stay collapsed until you open them with **◉ Progress**, and then take the rings' place. |
+| **reply-highlight** | Sets Claude's replies apart in the transcript: a violet edge down the left and a faint violet tint behind the text. |
 
-Both work alone; together they share the line.
+Each works alone; limit-bars and plan-progress-fx share the line under the prompt when both are installed.
 
 ## Install
 
@@ -20,6 +21,7 @@ Requires a Claude Code build with plugin hooks (`ui.render`).
 claude plugin marketplace add LegendSilvia/claude-code-mods
 claude plugin install limit-bars@claude-code-mods
 claude plugin install plan-progress-fx@claude-code-mods
+claude plugin install reply-highlight@claude-code-mods
 ```
 
 Restart Claude Code. If you use a `statusLine` command in `settings.json` that shows the model, folder or context, you can remove it: limit-bars shows the same.
@@ -45,6 +47,7 @@ Restart Claude Code. If you use a `statusLine` command in `settings.json` that s
 claude plugin validate plugins/limit-bars
 claude plugin test plugins/limit-bars
 claude plugin test plugins/plan-progress-fx
+claude plugin test plugins/reply-highlight
 ```
 
 ## License
