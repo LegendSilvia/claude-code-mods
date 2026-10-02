@@ -1,13 +1,13 @@
 import type { Register } from 'claude-code'
 
-// a gold edge down the left of each reply block, a warm tint behind it, and the prose in gold
-const EDGE = '#d4a017'
-const TINT = '#1d1810'
+// a violet edge down the left of each reply block, a violet tint behind it, and the prose in gold
+const EDGE = '#8b5cf6'
+const TINT = '#1b1726'
 const GOLD = '#e6c069'
 const BRIGHT = '#ffd97a'
 const HEADING = '#ffcf4d'
 const CODE = '#f5e6b8'
-const CODE_BG = '#2c2414'
+const CODE_BG = '#2d2440'
 const QUOTE = '#a8915a'
 
 export type Span = { text: string; kind: 'plain' | 'bold' | 'italic' | 'code' | 'link' }
