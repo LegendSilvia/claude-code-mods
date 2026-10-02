@@ -21,7 +21,7 @@
     {
       "name": "reply-highlight",
       "source": "./plugins/reply-highlight",
-      "description": "Sets Claude's replies apart in the transcript: a violet edge and tint, with bold text and headings in a rainbow"
+      "description": "Sets Claude's replies apart in the transcript: a rainbow edge, a violet tint, and bold text and headings in a rainbow"
     }
   ]
 }

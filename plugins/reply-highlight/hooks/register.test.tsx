@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { isProse, lines, rainbowColors, spans } from './register'
+import { edgeColors, estimateRows, isProse, lines, rainbowColors, spans } from './register'
 
 test('inline markdown splits into spans', async () => {
   expect(spans('a **b** `c` [d](http://x) *e* f')).toEqual([
@@ -80,4 +80,13 @@ test('rainbow gives each letter its own hue across the span', async () => {
   expect(c.map(x => x.ch).join('')).toBe('abcdef')
   expect(new Set(c.map(x => x.color)).size).toBe(6)
   expect(c[0]!.color).toMatch(/^#[0-9a-f]{6}$/)
+})
+
+test('the edge has a block per row, its hues running top to bottom', async () => {
+  expect(estimateRows('one line', 100)).toBe(3)
+  expect(estimateRows('a\nb\nc', 100)).toBe(5)
+  expect(estimateRows('x'.repeat(200), 50)).toBe(7)
+  const c = edgeColors(10)
+  expect(c.length).toBe(10)
+  expect(c[0]).not.toBe(c[9])
 })

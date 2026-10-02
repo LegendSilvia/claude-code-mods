@@ -1,7 +1,7 @@
 {
   "name": "reply-highlight",
-  "version": "0.3.0",
-  "description": "Sets Claude's replies apart in the transcript: a violet edge and tint, with bold text and headings in a rainbow",
+  "version": "0.4.0",
+  "description": "Sets Claude's replies apart in the transcript: a rainbow edge, a violet tint, and bold text and headings in a rainbow",
   "author": {
     "name": "LegendSilvia",
     "url": "https://github.com/LegendSilvia"
