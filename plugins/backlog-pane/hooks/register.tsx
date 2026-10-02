@@ -127,6 +127,19 @@ async function scan($: EngineInterface, dir: string): Promise<void> {
   await update($, board, () => ({ dir, statuses: statusesOf(String(config)), tasks: tasks.sort(byOrder), readAt }))
 }
 
+// the folder being polled, so a backlog created mid-session (backlog init) is picked up by /backlog
+let watching: string | null = null
+async function watch($: EngineInterface): Promise<string | null> {
+  const dir = watching ?? (await findBacklog($))
+  if (!dir) return null
+  await scan($, dir)
+  if (watching === null) {
+    watching = dir
+    $.clock.every(POLL_MS, () => void scan($, dir).catch(() => undefined))
+  }
+  return dir
+}
+
 const STYLE = {
   active: { glyph: '◐', color: '#ffcb6b' },
   todo: { glyph: '○', color: '#b388ff' },
@@ -134,19 +147,6 @@ const STYLE = {
 }
 
 export const register: Register = on => {
-  // the folder being polled, so a backlog created mid-session (backlog init) is picked up by /backlog
-  let watching: string | null = null
-  const watch = async ($: EngineInterface): Promise<string | null> => {
-    const dir = watching ?? (await findBacklog($))
-    if (!dir) return null
-    await scan($, dir)
-    if (watching === null) {
-      watching = dir
-      $.clock.every(POLL_MS, () => void scan($, dir).catch(() => undefined))
-    }
-    return dir
-  }
-
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
     await $.command.register({ name: 'backlog', description: "Show the workspace's Backlog.md tasks in a side pane" })
