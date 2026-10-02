@@ -2,7 +2,7 @@
 
 Stylish HUD mods for the Claude Code terminal, drawn under the prompt.
 
-![limit rings and progress bars under the Claude Code prompt](docs/screenshot.png)
+![a highlighted reply with rainbow headings and bold text, and the limit rings and progress bars under the Claude Code prompt](docs/screenshot.png)
 
 
 | Plugin | What it draws |
