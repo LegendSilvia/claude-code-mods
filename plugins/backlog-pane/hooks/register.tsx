@@ -134,20 +134,28 @@ const STYLE = {
 }
 
 export const register: Register = on => {
+  // the folder being polled, so a backlog created mid-session (backlog init) is picked up by /backlog
+  let watching: string | null = null
+  const watch = async ($: EngineInterface): Promise<string | null> => {
+    const dir = watching ?? (await findBacklog($))
+    if (!dir) return null
+    await scan($, dir)
+    if (watching === null) {
+      watching = dir
+      $.clock.every(POLL_MS, () => void scan($, dir).catch(() => undefined))
+    }
+    return dir
+  }
+
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
     await $.command.register({ name: 'backlog', description: "Show the workspace's Backlog.md tasks in a side pane" })
-    const dir = await findBacklog($)
-    if (!dir) return ran
-    await scan($, dir)
-    $.clock.every(POLL_MS, () => void scan($, dir).catch(() => undefined))
-    void $.ui.open({ id: PANE, title: 'Backlog' })
+    if (await watch($)) void $.ui.open({ id: PANE, title: 'Backlog' })
     return ran
   })
 
   on('command.run', { command: 'backlog' }, async $ => {
-    const found = (await read($, board)) ?? null
-    if (!found) return { text: 'No backlog/ folder in this workspace or above it. Run `backlog init` to start one.' }
+    if (!(await watch($))) return { text: 'No backlog/ folder in this workspace or above it. Run `backlog init` to start one.' }
     await $.ui.open({ id: PANE, title: 'Backlog' })
     return { text: 'Backlog pane opened.' }
   })
