@@ -3,6 +3,10 @@ export type Task = {
   title: string
   status: string
   priority?: string
+  type?: string
+  labels: string[]
+  assignee: string[]
+  ac: { done: number; total: number }
   parent?: string
   updated?: string
   created?: string
@@ -14,6 +18,6 @@ export type Git = { branch: string; ahead: number; behind: number; files: GitFil
 
 declare module 'claude-code' {
   interface PluginState {
-    'backlog-pane': { board: Board | null; git: Git | null }
+    'backlog-pane': { board: Board | null; git: Git | null; flash: string | null }
   }
 }

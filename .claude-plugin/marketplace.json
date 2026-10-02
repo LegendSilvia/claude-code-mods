@@ -26,7 +26,7 @@
     {
       "name": "backlog-pane",
       "source": "./plugins/backlog-pane",
-      "description": "A side pane with the workspace's Backlog.md tasks, in progress and to do, opened when the workspace has a backlog"
+      "description": "A side pane with the project's git status and its Backlog.md tasks: start, finish and create tasks from the pane"
     }
   ]
 }

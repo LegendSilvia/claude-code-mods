@@ -1,6 +1,6 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
-import { byOrder, frontMatter, parseGitStatus, searchDirs, statusesOf, toTask, when } from './register'
+import { acBar, acceptance, activeStatus, byOrder, doneStatus, frontLists, frontMatter, parseGitStatus, searchDirs, statusesOf, toTask, when } from './register'
 
 const TASK = `---
 id: TASK-1
@@ -54,6 +54,7 @@ test('tasks sort by ordinal, then id number', async () => {
 })
 
 test('without a backlog the pane says so', async ($, on) => {
+  mock.clock(on)
   const ui = await $.ui.mount({
     plugin: 'backlog-pane',
     surface: 'terminal',
@@ -94,4 +95,50 @@ test('the backlog is looked for in the project and up to its repo root, never ab
     String.raw`C:\Dev\mono`,
   ])
   expect(searchDirs(String.raw`C:\Development`, null)).toEqual([String.raw`C:\Development`])
+})
+
+const FULL = [
+  '---',
+  'id: TASK-1',
+  "title: 'reply-highlight: rainbow edge'",
+  'status: In Progress',
+  'assignee:',
+  "  - '@claude'",
+  'labels:',
+  '  - claude-code-mods',
+  '  - reply-highlight',
+  'type: bug',
+  'dependencies: []',
+  '---',
+  '',
+  '## Acceptance Criteria',
+  '<!-- AC:BEGIN -->',
+  '- [x] #1 first',
+  '- [ ] #2 second',
+  '- [X] #3 third',
+  '<!-- AC:END -->',
+  '',
+  '## Notes',
+  '- [ ] not a criterion',
+].join('\n')
+
+test('lists, type, assignee and acceptance criteria come out of a task file', async () => {
+  expect(frontLists(FULL)).toMatchObject({ labels: ['claude-code-mods', 'reply-highlight'], assignee: ['@claude'], dependencies: [] })
+  expect(toTask(FULL, 'x')).toMatchObject({ type: 'bug', labels: ['claude-code-mods', 'reply-highlight'], assignee: ['claude'], ac: { done: 2, total: 3 } })
+  expect(acceptance('## Acceptance Criteria\n- [x] a\n- [ ] b\n\n## Plan\n- [ ] c')).toEqual({ done: 1, total: 2 })
+  expect(acceptance('no criteria')).toEqual({ done: 0, total: 0 })
+})
+
+test('the buttons move tasks to the board’s own active and done statuses', async () => {
+  expect(activeStatus(['To Do', 'Doing', 'Review', 'Done'])).toBe('Doing')
+  expect(doneStatus(['To Do', 'In Progress', 'Done'])).toBe('Done')
+  expect(activeStatus(['Todo', 'Finished'])).toBe('In Progress')
+})
+
+test('the criteria bar fills its share in a rainbow', async () => {
+  expect(acBar(1, 2, 10).filled).toBe(5)
+  expect(acBar(0, 0, 10).filled).toBe(0)
+  const c = acBar(4, 4, 8).colors
+  expect(c.length).toBe(8)
+  expect(c[0]).not.toBe(c[7])
 })
