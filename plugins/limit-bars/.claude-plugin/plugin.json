@@ -1,6 +1,6 @@
 {
   "name": "limit-bars",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Four animated braille rings under the prompt: context, session, weekly and Fable limits, plus model and folder",
   "author": { "name": "LegendSilvia", "url": "https://github.com/LegendSilvia" },
   "license": "MIT",

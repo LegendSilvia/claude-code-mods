@@ -60,6 +60,10 @@ test('a wide screen draws the bars beside the status', async ($, on) => {
   const ui = await $.ui.mount({ plugin: 'plan-progress-fx', surface: 'terminal', component: 'PromptHint', props: HINT, viewport: { columns: 200, rows: 50 } })
   expect(await ui.find({ type: 'Text', text: 'rings' })).toBeDefined()
   expect(await ui.find({ type: 'Box', key: 'pp-bars' })).toBeDefined()
+  // status (66) + gap (2) + glyph, title, track, percent, close and their gaps fit inside 200 columns
+  const track = (await ui.find({ type: 'Raster' })) as { props: { columns: number } } | undefined
+  const title = 'Orders module'.length
+  expect(66 + 2 + 1 + 1 + title + 1 + (track?.props.columns ?? 999) + 1 + 4 + 1 + 1).toBeLessThanOrEqual(200)
 })
 
 test('a narrow screen keeps the bars closed until opened, then they replace the status', async ($, on) => {

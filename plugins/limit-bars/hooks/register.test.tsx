@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { effortBadge, folderOf, pick, pluck, pie, RING_COLS, RING_ROWS, ringCells, RINGS, tokens } from './register'
+import { effortBadge, folderOf, shortModel, pick, pluck, pie, RING_COLS, RING_ROWS, ringCells, RINGS, tokens } from './register'
 
 const LIMITS = [
   { kind: 'five_hour', percentUsed: 42 },
@@ -94,4 +94,10 @@ test('effort draws as a five-step meter in its level colour', async () => {
   expect(effortBadge('high')?.meter).toBe('▰▰▰▱▱')
   expect(effortBadge('max')?.meter).toBe('▰▰▰▰▰')
   expect(effortBadge('4096')).toMatchObject({ meter: '', label: '4096' })
+})
+
+test('the model drops its claude- prefix', async () => {
+  expect(shortModel('claude-opus-5-5[1m]')).toBe('opus-5-5[1m]')
+  expect(shortModel('sonnet')).toBe('sonnet')
+  expect(shortModel(undefined)).toBe('…')
 })

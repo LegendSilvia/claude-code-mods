@@ -1,6 +1,6 @@
 {
   "name": "plan-progress-fx",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "plan-progress fork with an animated rainbow pixel bar in the terminal, drawn under the prompt beside limit-bars: glide, shimmer, glow and a sparkle burst on done",
   "author": {
     "name": "LegendSilvia (fork of plan-progress by Kirill Serditov, MIT)",

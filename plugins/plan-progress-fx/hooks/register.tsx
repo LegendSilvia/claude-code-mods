@@ -429,6 +429,8 @@ const anims = new Map<string, Anim>()
 const STATUS_KEY = 'lb-status'
 const STATUS_W = 66
 const MIN_TRACK = 24
+// cells kept free at the row's ends: the hint line's indent and the terminal's last column
+const EDGE = 4
 type El = { type: string; props?: Record<string, unknown>; children?: unknown[] }
 const isEl = (n: unknown): n is El => typeof n === 'object' && n !== null && !Array.isArray(n) && 'type' in n
 
@@ -453,7 +455,10 @@ function swapKeyed(node: unknown, key: string, swap: (el: El) => unknown): [unkn
 
 const titleWidth = (list: Plan[], cols: number) => Math.min(Math.round(cols * 0.3), Math.max(...list.map(p => p.title.length)))
 // glyph, gaps, percent and the close button take ~16 cells
-const isWide = (list: Plan[], cols: number) => cols - STATUS_W - 2 - titleWidth(list, cols - STATUS_W - 2) - 16 >= MIN_TRACK
+const isWide = (list: Plan[], cols: number) => {
+  const room = cols - EDGE - STATUS_W - 2
+  return room - titleWidth(list, room) - 16 >= MIN_TRACK
+}
 
 // what the band last drew, so the frame clock can repaint it between renders
 let band: { requestId: string; bars: { key: string; plan: Plan; cols: number }[] } | null = null
@@ -1046,7 +1051,7 @@ export const register: Register = on => {
     const { Box, Button, Text } = t
     const below = await next(e)
     const now = await $.clock.now()
-    const room = wide ? cols - STATUS_W - 2 : cols
+    const room = (wide ? cols - STATUS_W - 2 : cols) - EDGE
     const titleW = titleWidth(list, room)
     const trackCols = Math.max(10, Math.min(512, room - titleW - 16))
     band = { requestId: e.requestId, bars: list.map(p => ({ key: `fx-${p.id}`, plan: p, cols: trackCols })) }
@@ -1060,17 +1065,24 @@ export const register: Register = on => {
           // the title runs through its state's hues; the percent wears the hue at the fill's head
           const [h0, h1] = TITLE_HUES[p.state]
           return (
-            <Box key={`bar-${p.id}`} flexDirection="row" alignItems="center" gap={1}>
-              <Text bold color={STATE_COLOR[p.state]}>{STATE_GLYPH[p.state]}</Text>
-              <Box flexDirection="row">
-                {[...title].map((ch, i) => (
-                  <Text key={`t-${p.id}-${i}`} bold={p.state !== 'done'} color={toHex(hsl(h0 + ((h1 - h0) * i) / Math.max(1, titleW - 1), 0.85, 0.66))}>
-                    {ch}
-                  </Text>
-                ))}
+            // every part keeps its width: the row is sized to fit, and a squeezed row would drop letters
+            <Box key={`bar-${p.id}`} flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
+              <Box flexShrink={0}>
+                <Text bold color={STATE_COLOR[p.state]}>{STATE_GLYPH[p.state]}</Text>
+              </Box>
+              <Box flexShrink={0} width={titleW}>
+                <Text bold={p.state !== 'done'} wrap="truncate">
+                  {[...title].map((ch, i) => (
+                    <Text key={`t-${p.id}-${i}`} color={toHex(hsl(h0 + ((h1 - h0) * i) / Math.max(1, titleW - 1), 0.85, 0.66))}>
+                      {ch}
+                    </Text>
+                  ))}
+                </Text>
               </Box>
               <Raster key={`fx-${p.id}`} columns={trackCols} rows={1} cells={rasterCells(p, trackCols, now)} />
-              <Text bold color={toHex(hsl(p.state === 'done' ? 150 : (pct / 100) * 320, 0.9, 0.62))}>{`${String(pct).padStart(3, FIGURE_SPACE)}%`}</Text>
+              <Box flexShrink={0} width={4}>
+                <Text bold color={toHex(hsl(p.state === 'done' ? 150 : (pct / 100) * 320, 0.9, 0.62))}>{`${String(pct).padStart(3, FIGURE_SPACE)}%`}</Text>
+              </Box>
               <Button key={`close-${p.id}`} plain dimColor label="✕" onPress={() => dropPlan($, p.id)} />
             </Box>
           )

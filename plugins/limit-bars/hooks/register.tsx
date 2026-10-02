@@ -52,6 +52,9 @@ export function tokens(n: number | undefined): string {
   return String(n)
 }
 
+// the model without its family prefix, so the effort meter fits beside it: opus-5-5[1m]
+export const shortModel = (model: string | undefined) => (model ? model.replace(/^claude-/, '') : '…')
+
 export const folderOf = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path
 
 // a braille ring, RING_COLS x RING_ROWS cells (2x4 dots each), filled clockwise from 12 o'clock,
@@ -219,13 +222,17 @@ export const register: Register = on => {
     })
 
     const status = (
-      <Box key={STATUS_KEY} flexDirection="row" gap={2} width={STATUS_W}>
+      <Box key={STATUS_KEY} flexDirection="row" gap={2} width={STATUS_W} flexShrink={0}>
         {rings}
         <Box flexDirection="column" flexShrink={1}>
           <Box flexDirection="row" gap={1}>
-            <Text bold wrap="truncate" color="#b388ff">◆ {meta?.model ?? '…'}</Text>
-            {badge ? <Text color={badge.color}>{badge.meter}</Text> : null}
-            {badge ? <Text bold color={badge.color}>{badge.label}</Text> : null}
+            <Text bold wrap="truncate" color="#b388ff">◆ {shortModel(meta?.model)}</Text>
+            {badge ? (
+              <Box flexDirection="row" gap={1} flexShrink={0}>
+                <Text color={badge.color}>{badge.meter}</Text>
+                <Text bold color={badge.color}>{badge.label}</Text>
+              </Box>
+            ) : null}
           </Box>
           <Text bold wrap="truncate" color="#4dd0e1">▸ {meta?.folder ?? '…'}</Text>
           <Text dimColor>{`${tokens(meta?.tokens)} / ${tokens(meta?.window)}`}</Text>
