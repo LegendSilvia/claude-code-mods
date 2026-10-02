@@ -153,14 +153,22 @@ export function pluck(node: unknown, keys: string[]): [unknown, El | null] {
   return [found ? { ...node, children } : node, found]
 }
 
-// effort levels as a five-step meter, each with its own colour; a numeric budget draws as its number
+// effort as rising signal bars, lit up to the level along the model's violet-to-pink gradient;
+// a numeric budget draws as its number alone
 const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
-const EFFORT_COLORS = ['#7aa2f7', '#4dd0e1', '#ffcb6b', '#ff9e64', '#ff5fd2']
-export function effortBadge(level: string | null): { meter: string; label: string; color: string } | null {
+const EFFORT_BARS = ['▂', '▃', '▅', '▆', '█']
+const EFFORT_STOPS = [[124, 77, 255], [179, 136, 255], [255, 95, 210]]
+export type EffortBadge = { bars: { glyph: string; color: string | null }[]; label: string; color: string }
+export function effortBadge(level: string | null): EffortBadge | null {
   if (level === null) return null
   const i = EFFORT_LEVELS.indexOf(level)
-  if (i < 0) return { meter: '', label: level, color: EFFORT_COLORS[2]! }
-  return { meter: '▰'.repeat(i + 1) + '▱'.repeat(EFFORT_LEVELS.length - i - 1), label: level, color: EFFORT_COLORS[i]! }
+  if (i < 0) return { bars: [], label: level, color: '#b388ff' }
+  const at = (k: number) => hex(along(EFFORT_STOPS, k / (EFFORT_BARS.length - 1)))
+  return {
+    bars: EFFORT_BARS.map((glyph, k) => ({ glyph, color: k <= i ? at(k) : null })),
+    label: level,
+    color: at(i),
+  }
 }
 
 // what the line last drew, so the frame clock can repaint the rings between renders
@@ -229,8 +237,24 @@ export const register: Register = on => {
             <Text bold wrap="truncate" color="#b388ff">◆ {shortModel(meta?.model)}</Text>
             {badge ? (
               <Box flexDirection="row" gap={1} flexShrink={0}>
-                <Text color={badge.color}>{badge.meter}</Text>
-                <Text bold color={badge.color}>{badge.label}</Text>
+                {badge.bars.length > 0 ? (
+                  <Text>
+                    {badge.bars.map((b, k) =>
+                      b.color ? (
+                        <Text key={`eb-${k}`} color={b.color}>
+                          {b.glyph}
+                        </Text>
+                      ) : (
+                        <Text key={`eb-${k}`} color="#3a3a42">
+                          {b.glyph}
+                        </Text>
+                      ),
+                    )}
+                  </Text>
+                ) : null}
+                <Text italic color={badge.color}>
+                  {badge.label}
+                </Text>
               </Box>
             ) : null}
           </Box>
