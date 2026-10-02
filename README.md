@@ -5,14 +5,14 @@ Stylish HUD mods for the Claude Code terminal, drawn under the prompt.
 ![limit rings and progress bars under the Claude Code prompt](docs/screenshot.png)
 
 ```
-⢠⡶⠛⠛⢶⡄ ⢠⡶⠛⠛⢶⡄ ⢠⡶⠛⠛⢶⡄ ⢠⡶⠛⠛⢶⡄  ◆ claude-opus-5-5[1m]   ✓ Orders module ▰▰▰▰▰▰▰▰▰▰ ✓ Done 16/16 100% ✕
+⢠⡶⠛⠛⢶⡄ ⢠⡶⠛⠛⢶⡄ ⢠⡶⠛⠛⢶⡄ ⢠⡶⠛⠛⢶⡄  ◆ claude-opus-5-5[1m] ▰▰▰▱▱ high   ✓ Orders module ▰▰▰▰▰▰▰▰▰▰ ✓ Done 16/16 100% ✕
 ⣿ 17%⣿ ⣿  8%⣿ ⣿ 18%⣿ ⣿ -- ⣿  ▸ my-project
 ⠘⠷⣤⣤⠾⠃ ⠘⠷⣤⣤⠾⠃ ⠘⠷⣤⣤⠾⠃ ⠘⠷⣤⣤⠾⠃  175k / 1M
 ```
 
 | Plugin | What it draws |
 | --- | --- |
-| **limit-bars** | Four braille rings, filled clockwise with the percentage inside: **context** (green → amber → red), **session** 5-hour limit (cyan → violet), **weekly** limit (pink → orange) and **Fable** weekly limit (mint → blue). A light orbits each filled arc; a ring pulses red past 80% (context) or 90% (limits). Beside them: model, workspace folder and tokens used. |
+| **limit-bars** | Four braille rings, filled clockwise with the percentage inside: **context** (green → amber → red), **session** 5-hour limit (cyan → violet), **weekly** limit (pink → orange) and **Fable** weekly limit (mint → blue). A light orbits each filled arc; a ring pulses red past 80% (context) or 90% (limits). Beside them: model with its effort level (a five-step meter, low → max), workspace folder and tokens used. |
 | **plan-progress-fx** | Animated rainbow progress bars for multi-step tasks, with gradient titles and percentages, placed to the right of the rings. On a narrow terminal they stay collapsed until you open them with **◉ Progress**, and then take the rings' place. |
 
 Both work alone; together they share the line.

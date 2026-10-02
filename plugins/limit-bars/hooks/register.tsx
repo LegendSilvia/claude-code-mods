@@ -5,6 +5,8 @@ import type { Info, Limit } from '../types'
 
 const limits = atom({ plugin: 'limit-bars', key: 'limits' } as const, [] as Limit[])
 const info = atom({ plugin: 'limit-bars', key: 'info' } as const, null as Info | null)
+// the main loop's effort as its last model request carried it; null for a model without effort
+const effort = atom({ plugin: 'limit-bars', key: 'effort' } as const, null as string | null)
 
 // one ring each, told apart by colour: context, session, weekly, Fable
 export const RINGS: { key: string; stops: number[][]; hotAt: number }[] = [
@@ -121,7 +123,7 @@ export const pie = (pct: number | undefined) => '○◔◑◕●'[Math.round(Mat
 // plan-progress-fx draws its bars as a Box keyed 'pp-bars' (beside this status) or 'pp-solo' (in its place,
 // on a screen too narrow for both); STATUS_W must match its copy there
 export const STATUS_KEY = 'lb-status'
-export const STATUS_W = 58
+export const STATUS_W = 66
 type El = { type: string; props?: Record<string, unknown>; children?: unknown[] }
 const isEl = (n: unknown): n is El => typeof n === 'object' && n !== null && !Array.isArray(n) && 'type' in n
 
@@ -146,6 +148,16 @@ export function pluck(node: unknown, keys: string[]): [unknown, El | null] {
   if (!node.children) return [node, null]
   const [children, found] = pluck(node.children, keys)
   return [found ? { ...node, children } : node, found]
+}
+
+// effort levels as a five-step meter, each with its own colour; a numeric budget draws as its number
+const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
+const EFFORT_COLORS = ['#7aa2f7', '#4dd0e1', '#ffcb6b', '#ff9e64', '#ff5fd2']
+export function effortBadge(level: string | null): { meter: string; label: string; color: string } | null {
+  if (level === null) return null
+  const i = EFFORT_LEVELS.indexOf(level)
+  if (i < 0) return { meter: '', label: level, color: EFFORT_COLORS[2]! }
+  return { meter: '▰'.repeat(i + 1) + '▱'.repeat(EFFORT_LEVELS.length - i - 1), label: level, color: EFFORT_COLORS[i]! }
 }
 
 // what the line last drew, so the frame clock can repaint the rings between renders
@@ -173,6 +185,15 @@ export const register: Register = on => {
     return ran
   })
 
+  // the effort rides on each model request of the main loop: note it, change nothing
+  on('turn.step', async function* ($, e, next) {
+    if (!e.agentId) {
+      const level = e.effort === undefined ? null : String(e.effort)
+      if ((await read($, effort)) !== level) await update($, effort, () => level)
+    }
+    return yield* next(e)
+  })
+
   on('session.measure', async ($, e, next) => {
     if (e.changed.includes('rateLimits')) await update($, limits, () => e.rateLimits)
     await measureInfo($, e.context)
@@ -182,6 +203,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     const engine = await next(e)
     const meta = await read($, info)
+    const badge = effortBadge(await read($, effort))
     const pcts = [meta?.percent, ...pick(await read($, limits)).map(l => l?.percentUsed)]
     const now = await $.clock.now()
     const t = $.ui.resolve(e)
@@ -200,7 +222,11 @@ export const register: Register = on => {
       <Box key={STATUS_KEY} flexDirection="row" gap={2} width={STATUS_W}>
         {rings}
         <Box flexDirection="column" flexShrink={1}>
-          <Text bold wrap="truncate" color="#b388ff">◆ {meta?.model ?? '…'}</Text>
+          <Box flexDirection="row" gap={1}>
+            <Text bold wrap="truncate" color="#b388ff">◆ {meta?.model ?? '…'}</Text>
+            {badge ? <Text color={badge.color}>{badge.meter}</Text> : null}
+            {badge ? <Text bold color={badge.color}>{badge.label}</Text> : null}
+          </Box>
           <Text bold wrap="truncate" color="#4dd0e1">▸ {meta?.folder ?? '…'}</Text>
           <Text dimColor>{`${tokens(meta?.tokens)} / ${tokens(meta?.window)}`}</Text>
         </Box>

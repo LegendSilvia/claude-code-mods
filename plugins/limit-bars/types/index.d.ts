@@ -3,6 +3,6 @@ export type Info = { model: string; folder: string; percent?: number; tokens?: n
 
 declare module 'claude-code' {
   interface PluginState {
-    'limit-bars': { limits: Limit[]; info: Info | null }
+    'limit-bars': { limits: Limit[]; info: Info | null; effort: string | null }
   }
 }

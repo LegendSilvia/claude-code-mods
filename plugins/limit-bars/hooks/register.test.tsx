@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { folderOf, pick, pluck, pie, RING_COLS, RING_ROWS, ringCells, RINGS, tokens } from './register'
+import { effortBadge, folderOf, pick, pluck, pie, RING_COLS, RING_ROWS, ringCells, RINGS, tokens } from './register'
 
 const LIMITS = [
   { kind: 'five_hour', percentUsed: 42 },
@@ -87,3 +87,11 @@ for (const [key, hasStatus] of [['pp-bars', true], ['pp-solo', false]] as const)
     expect((await ui.find({ type: 'Box', key: 'lb-status' })) !== undefined).toBe(hasStatus)
   })
 }
+
+test('effort draws as a five-step meter in its level colour', async () => {
+  expect(effortBadge(null)).toBeNull()
+  expect(effortBadge('low')?.meter).toBe('▰▱▱▱▱')
+  expect(effortBadge('high')?.meter).toBe('▰▰▰▱▱')
+  expect(effortBadge('max')?.meter).toBe('▰▰▰▰▰')
+  expect(effortBadge('4096')).toMatchObject({ meter: '', label: '4096' })
+})

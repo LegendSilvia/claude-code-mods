@@ -427,7 +427,7 @@ const anims = new Map<string, Anim>()
 // limit-bars draws its status under the prompt as a Box keyed STATUS_KEY, STATUS_W cells wide;
 // the bars sit to its right when both fit, and alone in its place otherwise
 const STATUS_KEY = 'lb-status'
-const STATUS_W = 58
+const STATUS_W = 66
 const MIN_TRACK = 24
 type El = { type: string; props?: Record<string, unknown>; children?: unknown[] }
 const isEl = (n: unknown): n is El => typeof n === 'object' && n !== null && !Array.isArray(n) && 'type' in n
