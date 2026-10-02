@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { lineColumns } from '../hooks/register'
 
 const BAND = { hasSurvey: false, isWorking: true, maxRows: 10, bodyColumns: 100, scroll: { offset: 0, bodyRows: 10 } }
 
@@ -83,4 +84,34 @@ test('a narrow screen keeps the bars closed until opened, then they replace the 
   await mode.press({ key: 'progress-toggle' })
   expect(await ui.find({ type: 'Box', key: 'pp-solo' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'rings' })).toBeUndefined()
+})
+
+test('a docked pane reports the window width, so the bars stay beside the status', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  status(on)
+  on('ui.render', { component: 'Pane' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return h(Text, {}, 'pokemon')
+  })
+  await $.command.run({ command: 'progress-demo' })
+  // another plugin's pane, docked 80 wide in a 210-wide window
+  await $.ui.mount({
+    plugin: 'plan-progress-fx',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'pokemon',
+    props: { title: 'Pokemon', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} } as never,
+    viewport: { columns: 210, rows: 50 },
+  })
+  // the line under the prompt is told the transcript column's width
+  const ui = await $.ui.mount({ plugin: 'plan-progress-fx', surface: 'terminal', component: 'PromptHint', props: HINT, viewport: { columns: 128, rows: 50 } })
+  expect(await ui.find({ type: 'Box', key: 'pp-bars' })).toBeDefined()
+})
+
+test('lineColumns widens only a width that matches the column beside a docked pane', async () => {
+
+  expect(lineColumns(128, { full: 210, body: 80 })).toBe(210)
+  expect(lineColumns(210, { full: 210, body: 80 })).toBe(210)
+  expect(lineColumns(90, { full: 210, body: 80 })).toBe(90)
+  expect(lineColumns(128, null)).toBe(128)
 })

@@ -55,6 +55,17 @@ export function tokens(n: number | undefined): string {
 // the model without its family prefix, so the effort meter fits beside it: opus-5-5[1m]
 export const shortModel = (model: string | undefined) => (model ? model.replace(/^claude-/, '') : '…')
 
+// when the session window resets, as the clock reads it: "4:30 PM" today, "Thu 9:00 AM" later
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+export function resetAt(iso: string | undefined, now: number): string | null {
+  const at = iso ? Date.parse(iso) : NaN
+  if (Number.isNaN(at)) return null
+  const d = new Date(at)
+  const h = d.getHours()
+  const clock = `${h % 12 === 0 ? 12 : h % 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
+  return new Date(now).toDateString() === d.toDateString() ? clock : `${DAYS[d.getDay()]} ${clock}`
+}
+
 export const folderOf = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path
 
 // a braille ring, RING_COLS x RING_ROWS cells (2x4 dots each), filled clockwise from 12 o'clock,
@@ -207,7 +218,9 @@ export const register: Register = on => {
     const engine = await next(e)
     const meta = await read($, info)
     const badge = effortBadge(await read($, effort))
-    const pcts = [meta?.percent, ...pick(await read($, limits)).map(l => l?.percentUsed)]
+    const windows = pick(await read($, limits))
+    const pcts = [meta?.percent, ...windows.map(l => l?.percentUsed)]
+    const reset = resetAt(windows[0]?.resetsAt, await $.clock.now())
     const now = await $.clock.now()
     const t = $.ui.resolve(e)
     const { Box, Text } = t
@@ -236,7 +249,14 @@ export const register: Register = on => {
             ) : null}
           </Box>
           <Text bold wrap="truncate" color="#4dd0e1">▸ {meta?.folder ?? '…'}</Text>
-          <Text dimColor>{`${tokens(meta?.tokens)} / ${tokens(meta?.window)}`}</Text>
+          <Box flexDirection="row" gap={2}>
+            <Text dimColor>{`${tokens(meta?.tokens)} / ${tokens(meta?.window)}`}</Text>
+            {reset ? (
+              <Text color={hex(RINGS[1]!.stops[0]!)}>
+                ↻ {reset}
+              </Text>
+            ) : null}
+          </Box>
         </Box>
       </Box>
     )

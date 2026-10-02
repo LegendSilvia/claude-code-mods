@@ -455,6 +455,16 @@ function swapKeyed(node: unknown, key: string, swap: (el: El) => unknown): [unkn
 
 const titleWidth = (list: Plan[], cols: number) => Math.min(Math.round(cols * 0.3), Math.max(...list.map(p => p.title.length)))
 // glyph, gaps, percent and the close button take ~16 cells
+// a docked pane narrows the width a render hook is told to the transcript column, though the
+// line under the prompt still spans the window; any docked pane's drawing reports the window's
+// width and its own, so a reported width that matches the column beside such a pane is widened
+type Dock = { full: number; body: number }
+let dock: Dock | null = null
+export function lineColumns(reported: number, d: Dock | null): number {
+  if (!d || d.full <= reported) return reported
+  return Math.abs(reported - (d.full - d.body)) <= 6 ? d.full : reported
+}
+
 const isWide = (list: Plan[], cols: number) => {
   const room = cols - EDGE - STATUS_W - 2
   return room - titleWidth(list, room) - 16 >= MIN_TRACK
@@ -1007,7 +1017,7 @@ export const register: Register = on => {
     const list = await read($, plans)
     const count = list.length
     // a narrow screen keeps its own open flag, closed until the person opens it
-    const wide = count === 0 || isWide(list, e.viewport?.columns ?? 200)
+    const wide = count === 0 || isWide(list, lineColumns(e.viewport?.columns ?? 200, dock))
     const open = wide ? await read($, isOpen) : await read($, narrowOpen)
     const { Box, Button, Text } = $.ui.resolve(e)
     // other mods add their labels to modes beneath us; keep them
@@ -1035,6 +1045,18 @@ export const register: Register = on => {
     )
   })
 
+  // watch every docked pane, any plugin's, for the window's real width; the drawing passes through
+  on('ui.render', { component: 'Pane' }, ($, e, next) => {
+    if (e.surface === 'terminal' && e.viewport && e.props.placement === 'dock') {
+      const seen = { full: e.viewport.columns, body: e.props.bodyColumns }
+      if (dock?.full !== seen.full || dock.body !== seen.body) {
+        dock = seen
+        $.ui.invalidate('ui.render')
+      }
+    }
+    return next(e)
+  })
+
   // the terminal draws the bars under the prompt (PromptHint); the band above it keeps the desktop's
   // the terminal draws the bars under the prompt (PromptHint), to the right of limit-bars' status;
   // where both don't fit they stay closed until opened, and then take the status's place
@@ -1042,7 +1064,7 @@ export const register: Register = on => {
     const list = await read($, plans)
     const t = $.ui.resolve(e)
     const Raster = e.surface === 'terminal' && 'Raster' in t ? t.Raster : null
-    const cols = e.viewport?.columns ?? 100
+    const cols = lineColumns(e.viewport?.columns ?? 100, dock)
     const wide = isWide(list, cols)
     if (!Raster || list.length === 0 || !(wide ? await read($, isOpen) : await read($, narrowOpen))) {
       if (e.surface === 'terminal') band = null

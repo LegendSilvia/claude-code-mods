@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { effortBadge, folderOf, shortModel, pick, pluck, pie, RING_COLS, RING_ROWS, ringCells, RINGS, tokens } from './register'
+import { effortBadge, folderOf, resetAt, shortModel, pick, pluck, pie, RING_COLS, RING_ROWS, ringCells, RINGS, tokens } from './register'
 
 const LIMITS = [
   { kind: 'five_hour', percentUsed: 42 },
@@ -99,4 +99,12 @@ test('the model drops its claude- prefix', async () => {
   expect(shortModel('claude-opus-5-5[1m]')).toBe('opus-5-5[1m]')
   expect(shortModel('sonnet')).toBe('sonnet')
   expect(shortModel(undefined)).toBe('…')
+})
+
+test('the session reset reads as a clock time today, with the weekday later', async () => {
+  const now = new Date(2026, 9, 2, 14, 0).getTime()
+  expect(resetAt(new Date(2026, 9, 2, 16, 30).toISOString(), now)).toBe('4:30 PM')
+  expect(resetAt(new Date(2026, 9, 3, 0, 5).toISOString(), now)).toBe('Sat 12:05 AM')
+  expect(resetAt(undefined, now)).toBeNull()
+  expect(resetAt('not a date', now)).toBeNull()
 })
