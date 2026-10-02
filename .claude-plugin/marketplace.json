@@ -5,7 +5,7 @@
     "url": "https://github.com/LegendSilvia"
   },
   "metadata": {
-    "description": "Stylish HUD mods for the Claude Code terminal: limit rings, animated progress bars and highlighted replies"
+    "description": "Stylish HUD mods for the Claude Code terminal: limit rings, animated progress bars, highlighted replies and a Backlog.md side pane"
   },
   "plugins": [
     {
@@ -22,6 +22,11 @@
       "name": "reply-highlight",
       "source": "./plugins/reply-highlight",
       "description": "Sets Claude's replies apart in the transcript: a rainbow edge, a violet tint, and bold text and headings in a rainbow"
+    },
+    {
+      "name": "backlog-pane",
+      "source": "./plugins/backlog-pane",
+      "description": "A side pane with the workspace's Backlog.md tasks, in progress and to do, opened when the workspace has a backlog"
     }
   ]
 }

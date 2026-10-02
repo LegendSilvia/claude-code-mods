@@ -1,0 +1,9 @@
+{
+  "name": "backlog-pane",
+  "version": "0.1.0",
+  "description": "A side pane with the workspace's Backlog.md tasks, in progress and to do, opened when the workspace has a backlog",
+  "author": { "name": "LegendSilvia", "url": "https://github.com/LegendSilvia" },
+  "license": "MIT",
+  "homepage": "https://github.com/LegendSilvia/claude-code-mods",
+  "types": "./types/index.d.ts"
+}
