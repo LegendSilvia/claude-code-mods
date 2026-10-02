@@ -87,18 +87,32 @@ const clock = (now: number) => {
   return `${h % 12 === 0 ? 12 : h % 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
 }
 
-// the workspace's backlog folder: backlog/ or .backlog/ holding tasks/, in the project root or above it
+// the folders a workspace's backlog may sit in: the project root, and above it only as far as
+// the root's own git repository goes, so a folder of unrelated projects never lends its backlog
+export function searchDirs(root: string, repoTop: string | null): string[] {
+  const norm = (p: string) => p.replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase()
+  const dirs = [root.replace(/[\\/]+$/, '')]
+  if (repoTop === null) return dirs
+  const top = norm(repoTop)
+  let dir = dirs[0]!
+  while (norm(dir) !== top && norm(dir).startsWith(`${top}/`)) {
+    dir = dir.slice(0, Math.max(dir.lastIndexOf('/'), dir.lastIndexOf('\\')))
+    dirs.push(dir)
+  }
+  return dirs
+}
+
+// the workspace's backlog folder: backlog/ or .backlog/ holding tasks/, in one of the searchDirs
 async function findBacklog($: EngineInterface): Promise<string | null> {
-  let dir = (await $.session.root()).replace(/[\\/]+$/, '')
-  const sep = dir.includes('\\') ? '\\' : '/'
-  for (let depth = 0; depth < 8 && dir; depth++) {
+  const root = await $.session.root()
+  const r = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd: root, timeoutMs: 10000 }).catch(() => null)
+  const top = r && r.exitCode === 0 ? r.stdout.trim() : null
+  const sep = root.includes('\\') ? '\\' : '/'
+  for (const dir of searchDirs(root, top)) {
     for (const name of ['backlog', '.backlog']) {
       const candidate = `${dir}${sep}${name}`
       if (await $.fs.exists(`${candidate}${sep}tasks`).catch(() => false)) return candidate
     }
-    const cut = Math.max(dir.lastIndexOf('/'), dir.lastIndexOf('\\'))
-    if (cut <= 0 || /^[A-Za-z]:$/.test(dir)) break
-    dir = dir.slice(0, cut)
   }
   return null
 }
@@ -190,7 +204,7 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'backlog' }, async $ => {
-    if (!(await watch($))) return { text: 'No backlog/ folder in this workspace or above it. Run `backlog init` to start one.' }
+    if (!(await watch($))) return { text: 'No backlog/ folder in this project (its root, or up to its git repository root). Run `backlog init` here to start one.' }
     await $.ui.open({ id: PANE, title: 'Backlog' })
     return { text: 'Backlog pane opened.' }
   })

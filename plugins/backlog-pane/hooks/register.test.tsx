@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { byOrder, frontMatter, parseGitStatus, statusesOf, toTask, when } from './register'
+import { byOrder, frontMatter, parseGitStatus, searchDirs, statusesOf, toTask, when } from './register'
 
 const TASK = `---
 id: TASK-1
@@ -82,4 +82,16 @@ test('git status reads branch, ahead/behind and one code per file', async () => 
   expect(parseGitStatus('## main\n')).toMatchObject({ branch: 'main', ahead: 0, behind: 0, files: [] })
   expect(parseGitStatus('## No commits yet on dev\n').branch).toBe('dev')
   expect(parseGitStatus('## HEAD (no branch)\n').branch).toBe('detached')
+})
+
+test('the backlog is looked for in the project and up to its repo root, never above', async () => {
+  expect(searchDirs(String.raw`C:\Development\production-control-web`, 'C:/Development/production-control-web')).toEqual([
+    String.raw`C:\Development\production-control-web`,
+  ])
+  expect(searchDirs(String.raw`C:\Dev\mono\apps\web`, 'C:/Dev/mono')).toEqual([
+    String.raw`C:\Dev\mono\apps\web`,
+    String.raw`C:\Dev\mono\apps`,
+    String.raw`C:\Dev\mono`,
+  ])
+  expect(searchDirs(String.raw`C:\Development`, null)).toEqual([String.raw`C:\Development`])
 })
