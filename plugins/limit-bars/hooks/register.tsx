@@ -153,22 +153,14 @@ export function pluck(node: unknown, keys: string[]): [unknown, El | null] {
   return [found ? { ...node, children } : node, found]
 }
 
-// effort as rising signal bars, lit up to the level along the model's violet-to-pink gradient;
-// a numeric budget draws as its number alone
+// effort as its label alone, coloured along the model's violet-to-pink gradient by level;
+// a numeric budget draws as its number
 const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
-const EFFORT_BARS = ['▂', '▃', '▅', '▆', '█']
 const EFFORT_STOPS = [[124, 77, 255], [179, 136, 255], [255, 95, 210]]
-export type EffortBadge = { bars: { glyph: string; color: string | null }[]; label: string; color: string }
-export function effortBadge(level: string | null): EffortBadge | null {
+export function effortBadge(level: string | null): { label: string; color: string } | null {
   if (level === null) return null
   const i = EFFORT_LEVELS.indexOf(level)
-  if (i < 0) return { bars: [], label: level, color: '#b388ff' }
-  const at = (k: number) => hex(along(EFFORT_STOPS, k / (EFFORT_BARS.length - 1)))
-  return {
-    bars: EFFORT_BARS.map((glyph, k) => ({ glyph, color: k <= i ? at(k) : null })),
-    label: level,
-    color: at(i),
-  }
+  return { label: level, color: hex(along(EFFORT_STOPS, i < 0 ? 0.5 : i / (EFFORT_LEVELS.length - 1))) }
 }
 
 // what the line last drew, so the frame clock can repaint the rings between renders
@@ -236,22 +228,7 @@ export const register: Register = on => {
           <Box flexDirection="row" gap={1}>
             <Text bold wrap="truncate" color="#b388ff">◆ {shortModel(meta?.model)}</Text>
             {badge ? (
-              <Box flexDirection="row" gap={1} flexShrink={0}>
-                {badge.bars.length > 0 ? (
-                  <Text>
-                    {badge.bars.map((b, k) =>
-                      b.color ? (
-                        <Text key={`eb-${k}`} color={b.color}>
-                          {b.glyph}
-                        </Text>
-                      ) : (
-                        <Text key={`eb-${k}`} color="#3a3a42">
-                          {b.glyph}
-                        </Text>
-                      ),
-                    )}
-                  </Text>
-                ) : null}
+              <Box flexShrink={0}>
                 <Text italic color={badge.color}>
                   {badge.label}
                 </Text>

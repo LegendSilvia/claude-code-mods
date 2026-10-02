@@ -88,14 +88,11 @@ for (const [key, hasStatus] of [['pp-bars', true], ['pp-solo', false]] as const)
   })
 }
 
-test('effort lights signal bars up to its level', async () => {
-  const lit = (l: string) => effortBadge(l)?.bars.filter(b => b.color !== null).length
+test('effort draws as its label, coloured by level', async () => {
   expect(effortBadge(null)).toBeNull()
-  expect(lit('low')).toBe(1)
-  expect(lit('medium')).toBe(2)
-  expect(lit('max')).toBe(5)
-  expect(effortBadge('high')?.bars.map(b => b.glyph).join('')).toBe('▂▃▅▆█')
-  expect(effortBadge('4096')).toMatchObject({ bars: [], label: '4096' })
+  expect(effortBadge('medium')?.label).toBe('medium')
+  expect(effortBadge('low')?.color).not.toBe(effortBadge('max')?.color)
+  expect(effortBadge('4096')?.label).toBe('4096')
 })
 
 test('the model drops its claude- prefix', async () => {
