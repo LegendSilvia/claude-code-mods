@@ -1,14 +1,27 @@
 import type { Register } from 'claude-code'
 
-// a violet edge down the left of each reply block, a violet tint behind it, and the prose in gold
+// a violet edge down the left of each reply block and a violet tint behind it; the prose keeps the
+// terminal's own colour, and what Claude bolds (and headings) runs through a rainbow
 const EDGE = '#8b5cf6'
 const TINT = '#1b1726'
-const GOLD = '#e6c069'
-const BRIGHT = '#ffd97a'
-const HEADING = '#ffcf4d'
-const CODE = '#f5e6b8'
+const ACCENT = '#b388ff'
 const CODE_BG = '#2d2440'
-const QUOTE = '#a8915a'
+
+// a hue in degrees to #rrggbb at fixed saturation and lightness, bright enough for a dark panel
+export function rainbow(hue: number): string {
+  const s = 0.9
+  const l = 0.68
+  const k = (n: number) => (n + hue / 30) % 12
+  const a = s * Math.min(l, 1 - l)
+  const c = (n: number) => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))))
+  return `#${[0, 8, 4].map(n => c(n).toString(16).padStart(2, '0')).join('')}`
+}
+
+// one hue per character, a whole spectrum across the span however long it is
+export const rainbowColors = (text: string) => {
+  const n = [...text].length
+  return [...text].map((ch, i) => ({ ch, color: rainbow((i / Math.max(1, n)) * 300) }))
+}
 
 export type Span = { text: string; kind: 'plain' | 'bold' | 'italic' | 'code' | 'link' }
 export type Line = { kind: 'blank' | 'heading' | 'item' | 'quote' | 'text'; prefix: string; spans: Span[] }
@@ -58,38 +71,40 @@ export const register: Register = on => {
     const prose = isProse(e.props.text)
     const drawn = prose ? null : await next(e)
 
-    const span = (s: Span, key: string, base: string) => {
+    const bow = (text: string, key: string, extra: { underline?: boolean } = {}) => (
+      <Text key={key} bold underline={extra.underline}>
+        {rainbowColors(text).map((c, i) => (
+          <Text key={`${key}-${i}`} color={c.color}>
+            {c.ch}
+          </Text>
+        ))}
+      </Text>
+    )
+
+    const span = (s: Span, key: string) => {
       switch (s.kind) {
         case 'bold':
-          return (
-            <Text key={key} bold color={BRIGHT}>
-              {s.text}
-            </Text>
-          )
+          return bow(s.text, key)
         case 'italic':
           return (
-            <Text key={key} italic color={base}>
+            <Text key={key} italic>
               {s.text}
             </Text>
           )
         case 'code':
           return (
-            <Text key={key} color={CODE} backgroundColor={CODE_BG}>
+            <Text key={key} color={ACCENT} backgroundColor={CODE_BG}>
               {s.text}
             </Text>
           )
         case 'link':
           return (
-            <Text key={key} underline color={BRIGHT}>
+            <Text key={key} underline color={ACCENT}>
               {s.text}
             </Text>
           )
         default:
-          return (
-            <Text key={key} color={base}>
-              {s.text}
-            </Text>
-          )
+          return <Text key={key}>{s.text}</Text>
       }
     }
 
@@ -97,15 +112,15 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {lines(e.props.text).map((l, i) => {
           if (l.kind === 'blank') return <Text key={`l-${i}`}> </Text>
-          const base = l.kind === 'heading' ? HEADING : l.kind === 'quote' ? QUOTE : GOLD
+          const text = l.spans.map(x => x.text).join('')
           return (
-            <Text key={`l-${i}`} bold={l.kind === 'heading'}>
+            <Text key={`l-${i}`} dimColor={l.kind === 'quote'}>
               {l.prefix ? (
-                <Text key={`p-${i}`} color={l.kind === 'quote' ? EDGE : BRIGHT}>
+                <Text key={`p-${i}`} color={ACCENT}>
                   {l.prefix}
                 </Text>
               ) : null}
-              {l.spans.map((s, k) => span(s, `s-${i}-${k}`, base))}
+              {l.kind === 'heading' ? bow(text, `h-${i}`) : l.spans.map((x, k) => span(x, `s-${i}-${k}`))}
             </Text>
           )
         })}
@@ -121,7 +136,7 @@ export const register: Register = on => {
           {/* the reply's opening star; later blocks keep the same indent */}
           {prose ? (
             <Box flexShrink={0} width={1}>
-              <Text color={HEADING}>{e.props.isFirstOfReply ? '✦' : ' '}</Text>
+              <Text color={ACCENT}>{e.props.isFirstOfReply ? '✦' : ' '}</Text>
             </Box>
           ) : null}
           <Box flexGrow={1} flexDirection="column">

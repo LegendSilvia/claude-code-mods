@@ -1,8 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
-import { isProse, lines, spans } from './register'
+import { isProse, lines, rainbowColors, spans } from './register'
 
-test('inline markdown splits into gold spans', async () => {
+test('inline markdown splits into spans', async () => {
   expect(spans('a **b** `c` [d](http://x) *e* f')).toEqual([
     { text: 'a ', kind: 'plain' },
     { text: 'b', kind: 'bold' },
@@ -30,7 +30,7 @@ test('code fences and tables are left to Claude Code', async () => {
   expect(isProse('| a | b |\n| --- | --- |')).toBe(false)
 })
 
-test('the terminal draws prose itself in gold, with the opening star', async ($, on) => {
+test('the terminal draws prose itself, bold in rainbow, with the opening star', async ($, on) => {
   on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
     const { Text } = $.ui.resolve(e)
     return <Text>engine</Text>
@@ -41,7 +41,8 @@ test('the terminal draws prose itself in gold, with the opening star', async ($,
     component: 'AssistantMessage',
     props: { text: 'Hello **there**', isFirstOfReply: true },
   })
-  expect(await ui.find({ type: 'Text', text: 'there' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 't' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Hello ' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '✦' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'engine' })).toBeUndefined()
 })
@@ -72,4 +73,11 @@ test('the desktop draws replies as it always has', async ($, on) => {
     props: { text: 'Hello', isFirstOfReply: true },
   })
   expect(await ui.drawn()).toMatchObject({ type: 'Text' })
+})
+
+test('rainbow gives each letter its own hue across the span', async () => {
+  const c = rainbowColors('abcdef')
+  expect(c.map(x => x.ch).join('')).toBe('abcdef')
+  expect(new Set(c.map(x => x.color)).size).toBe(6)
+  expect(c[0]!.color).toMatch(/^#[0-9a-f]{6}$/)
 })
