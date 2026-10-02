@@ -2,6 +2,8 @@
 
 Stylish HUD mods for the Claude Code terminal, drawn under the prompt.
 
+![limit rings and progress bars under the Claude Code prompt](docs/screenshot.png)
+
 ```
 ⢠⡶⠛⠛⢶⡄ ⢠⡶⠛⠛⢶⡄ ⢠⡶⠛⠛⢶⡄ ⢠⡶⠛⠛⢶⡄  ◆ claude-opus-5-5[1m]   ✓ Orders module ▰▰▰▰▰▰▰▰▰▰ ✓ Done 16/16 100% ✕
 ⣿ 17%⣿ ⣿  8%⣿ ⣿ 18%⣿ ⣿ -- ⣿  ▸ my-project
