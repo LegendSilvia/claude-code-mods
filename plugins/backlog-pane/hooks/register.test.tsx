@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { byOrder, frontMatter, statusesOf, toTask, when } from './register'
+import { byOrder, frontMatter, parseGitStatus, statusesOf, toTask, when } from './register'
 
 const TASK = `---
 id: TASK-1
@@ -62,4 +62,24 @@ test('without a backlog the pane says so', async ($, on) => {
     props: { title: 'Backlog', isFocused: false, bodyColumns: 40, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} } as never,
   })
   expect(await ui.find({ type: 'Text', text: /No backlog/ })).toBeDefined()
+})
+
+test('git status reads branch, ahead/behind and one code per file', async () => {
+  const g = parseGitStatus(
+    [
+      '## main...origin/main [ahead 2, behind 1]',
+      ' M limit-bars/hooks.json',
+      'M  reply-highlight/hooks.json',
+      ' D limit-bars/hooks/register.tsx',
+      '?? backlog.md',
+      'R  old.ts -> new.ts',
+      '',
+    ].join('\n'),
+  )
+  expect(g).toMatchObject({ branch: 'main', ahead: 2, behind: 1 })
+  expect(g.files.map(f => f.code).join('')).toBe('MMD?R')
+  expect(g.files[4]!.path).toBe('new.ts')
+  expect(parseGitStatus('## main\n')).toMatchObject({ branch: 'main', ahead: 0, behind: 0, files: [] })
+  expect(parseGitStatus('## No commits yet on dev\n').branch).toBe('dev')
+  expect(parseGitStatus('## HEAD (no branch)\n').branch).toBe('detached')
 })

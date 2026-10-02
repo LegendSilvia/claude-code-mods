@@ -1,11 +1,12 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Board, Task } from '../types'
+import type { Board, Git, GitFile, Task } from '../types'
 
 const PANE = 'backlog'
 const POLL_MS = 4000
 const board = atom({ plugin: 'backlog-pane', key: 'board' } as const, null as Board | null)
+const git = atom({ plugin: 'backlog-pane', key: 'git' } as const, null as Git | null)
 
 const DEFAULT_STATUSES = ['To Do', 'In Progress', 'Done']
 const DONE = /^(done|completed?|closed)$/i
@@ -127,18 +128,52 @@ async function scan($: EngineInterface, dir: string): Promise<void> {
   await update($, board, () => ({ dir, statuses: statusesOf(String(config)), tasks: tasks.sort(byOrder), readAt }))
 }
 
+// `git status --porcelain=v1 -b`: the branch line, then one line per changed path
+export function parseGitStatus(out: string): Git {
+  const lines = out.replace(/\r\n/g, '\n').split('\n').filter(Boolean)
+  const head = lines[0]?.startsWith('## ') ? lines.shift()!.slice(3) : ''
+  const branch =
+    /^No commits yet on (.+)$/.exec(head)?.[1] ??
+    (/^HEAD \(no branch\)/.test(head) ? 'detached' : head.split('...')[0]!.split(' ')[0] || '?')
+  const ahead = Number(/ahead (\d+)/.exec(head)?.[1] ?? 0)
+  const behind = Number(/behind (\d+)/.exec(head)?.[1] ?? 0)
+  const files: GitFile[] = lines.map(l => {
+    const xy = l.slice(0, 2)
+    const path = l.slice(3).split(' -> ').pop()!.replace(/^"(.*)"$/, '$1')
+    const code = xy === '??' ? '?' : xy[0] !== ' ' ? xy[0]! : xy[1]!
+    return { code, path }
+  })
+  return { branch, ahead, behind, files }
+}
+
+// the workspace's git state, or null where it is not a repository (or git is missing)
+async function scanGit($: EngineInterface, cwd: string): Promise<void> {
+  const r = await $.process.run(['git', 'status', '--porcelain=v1', '-b'], { cwd, timeoutMs: 10000 }).catch(() => null)
+  const next = r && r.exitCode === 0 ? parseGitStatus(r.stdout) : null
+  const prev = await read($, git)
+  if (JSON.stringify(prev) !== JSON.stringify(next)) await update($, git, () => next)
+}
+
 // the folder being polled, so a backlog created mid-session (backlog init) is picked up by /backlog
 let watching: string | null = null
 async function watch($: EngineInterface): Promise<string | null> {
   const dir = watching ?? (await findBacklog($))
   if (!dir) return null
+  const root = await $.session.root()
   await scan($, dir)
+  await scanGit($, root)
   if (watching === null) {
     watching = dir
-    $.clock.every(POLL_MS, () => void scan($, dir).catch(() => undefined))
+    $.clock.every(POLL_MS, () => {
+      void scan($, dir).catch(() => undefined)
+      void scanGit($, root).catch(() => undefined)
+    })
   }
   return dir
 }
+
+const GIT_CODE_COLOR: Record<string, string> = { M: '#ffcb6b', A: '#69f0ae', D: '#ff6b8b', R: '#b388ff', C: '#b388ff', U: '#ff6b8b', '?': '#69f0ae' }
+const GIT_ROWS = 8
 
 const STYLE = {
   active: { glyph: '◐', color: '#ffcb6b' },
@@ -164,12 +199,38 @@ export const register: Register = on => {
     const { Box, Text } = $.ui.resolve(e)
     const b = await read($, board)
     if (!b) return <Text dimColor>No backlog in this workspace.</Text>
+    const g = await read($, git)
     const now = await $.clock.now()
+    const rule = <Text color="#3a3a42">{'─'.repeat(Math.max(4, (e.props.bodyColumns ?? 40) - 1))}</Text>
+    const gitRows = g ? Math.min(g.files.length, GIT_ROWS) + (g.files.length > GIT_ROWS ? 1 : 0) : 0
+    const gitSection = g ? (
+      <Box key="git" flexDirection="column" marginBottom={1}>
+        <Box flexDirection="row" justifyContent="space-between">
+          <Text bold color="#69f0ae">
+            ⎇ {g.branch}
+          </Text>
+          <Text dimColor>
+            ↑{g.ahead} ↓{g.behind}
+          </Text>
+        </Box>
+        {rule}
+        {g.files.length === 0 ? <Text dimColor>✓ clean</Text> : null}
+        {g.files.slice(0, GIT_ROWS).map((f, i) => (
+          <Text key={`gf-${i}`} wrap="truncate-start">
+            <Text bold color={GIT_CODE_COLOR[f.code] ?? '#4dd0e1'}>
+              {f.code}
+            </Text>{' '}
+            {f.path}
+          </Text>
+        ))}
+        {g.files.length > GIT_ROWS ? <Text dimColor>+{g.files.length - GIT_ROWS} more</Text> : null}
+      </Box>
+    ) : null
     const open = b.statuses.filter(s => !DONE.test(s))
     // in-progress kinds first, then the rest in the board's own order
     const order = [...open.filter(s => ACTIVE.test(s)), ...open.filter(s => !ACTIVE.test(s))]
     const done = b.tasks.filter(t => DONE.test(t.status)).length
-    let room = Math.max(6, (e.viewport?.rows ?? 30) - 4)
+    let room = Math.max(6, (e.viewport?.rows ?? 30) - 4 - (g ? gitRows + 3 : 0))
 
     const sections = order.map(status => {
       const list = b.tasks.filter(t => t.status === status)
@@ -218,6 +279,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
+        {gitSection}
         {sections}
         <Text dimColor>
           {done > 0 ? `✓ ${done} done · ` : ''}backlog · updated {clock(b.readAt)}
