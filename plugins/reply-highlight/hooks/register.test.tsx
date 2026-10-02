@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { edgeColors, estimateRows, isProse, lines, rainbowColors, spans } from './register'
+import { edgeColors, edgeSegments, estimateRows, isProse, lines, rainbow, rainbowColors, spans } from './register'
 
 test('inline markdown splits into spans', async () => {
   expect(spans('a **b** `c` [d](http://x) *e* f')).toEqual([
@@ -82,11 +82,30 @@ test('rainbow gives each letter its own hue across the span', async () => {
   expect(c[0]!.color).toMatch(/^#[0-9a-f]{6}$/)
 })
 
-test('the edge has a block per row, its hues running top to bottom', async () => {
+test('the edge is sliced into equal-growing segments that span the whole spectrum', async () => {
   expect(estimateRows('one line', 100)).toBe(3)
-  expect(estimateRows('a\nb\nc', 100)).toBe(5)
   expect(estimateRows('x'.repeat(200), 50)).toBe(7)
-  const c = edgeColors(10)
-  expect(c.length).toBe(10)
-  expect(c[0]).not.toBe(c[9])
+  expect(edgeSegments(3)).toBe(6)
+  expect(edgeSegments(20)).toBe(20)
+  expect(edgeSegments(500)).toBe(48)
+  const c = edgeColors(6)
+  expect(c.length).toBe(6)
+  expect(c[0]).toBe(rainbow(0))
+  expect(c[5]).toBe(rainbow(300))
+})
+
+test('the drawn edge is background-coloured boxes that grow, not rows of text', async ($, on) => {
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  const ui = await $.ui.mount({
+    plugin: 'reply-highlight',
+    surface: 'terminal',
+    component: 'AssistantMessage',
+    props: { text: 'Hello', isFirstOfReply: true },
+  })
+  expect(await ui.find({ type: 'Box', key: 'edge-0' })).toMatchObject({ props: { flexGrow: 1, backgroundColor: rainbow(0) } })
+  expect(await ui.find({ type: 'Box', key: 'edge-5' })).toMatchObject({ props: { backgroundColor: rainbow(300) } })
+  expect(await ui.find({ type: 'Text', text: '█' })).toBeUndefined()
 })

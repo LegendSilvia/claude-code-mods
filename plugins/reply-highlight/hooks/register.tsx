@@ -16,15 +16,18 @@ export function rainbow(hue: number): string {
   return `#${[0, 8, 4].map(n => c(n).toString(16).padStart(2, '0')).join('')}`
 }
 
-// how many rows a block takes at this width, rounded up: the edge draws that many and the
-// box clips any extra, so a guess on the high side costs nothing
+// about how many rows a block takes at this width; only sets how finely the edge is sliced
 export function estimateRows(text: string, columns: number): number {
   const width = Math.max(10, columns - 6)
   return text.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil([...l].length / width)), 0) + 2
 }
 
-// the edge: one block per row, the spectrum spread from the block's top to its bottom
-export const edgeColors = (rows: number) => Array.from({ length: rows }, (_, i) => rainbow((i / Math.max(1, rows)) * 300))
+// the edge's slices: the layout shares the block's real height among them, so the spectrum runs
+// from its top row to its bottom row however the text wraps; on a short block the extra slices get
+// no rows, on a tall one each stretches
+export const edgeSegments = (rows: number) => Math.min(48, Math.max(6, rows))
+export const edgeColors = (segments: number) =>
+  Array.from({ length: segments }, (_, i) => rainbow((i / Math.max(1, segments - 1)) * 300))
 
 // one hue per character, a whole spectrum across the span however long it is
 export const rainbowColors = (text: string) => {
@@ -142,10 +145,8 @@ export const register: Register = on => {
       <Box flexDirection="row">
         {/* placed over the row's left column, so its rows never make the block taller */}
         <Box position="absolute" top={0} bottom={0} left={0} width={1} flexDirection="column" overflow="hidden">
-          {edgeColors(estimateRows(e.props.text, e.viewport?.columns ?? 100)).map((c, i) => (
-            <Text key={`edge-${i}`} color={c}>
-              █
-            </Text>
+          {edgeColors(edgeSegments(estimateRows(e.props.text, e.viewport?.columns ?? 100))).map((c, i) => (
+            <Box key={`edge-${i}`} flexGrow={1} backgroundColor={c} />
           ))}
         </Box>
         <Box width={1} flexShrink={0} />
