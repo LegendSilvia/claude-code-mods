@@ -1,0 +1,17 @@
+{
+  "name": "claude-code-mods",
+  "owner": { "name": "LegendSilvia", "url": "https://github.com/LegendSilvia" },
+  "metadata": { "description": "Stylish HUD mods for the Claude Code terminal: limit rings and animated progress bars" },
+  "plugins": [
+    {
+      "name": "limit-bars",
+      "source": "./plugins/limit-bars",
+      "description": "Four animated braille rings under the prompt: context, session, weekly and Fable limits, plus model and folder"
+    },
+    {
+      "name": "plan-progress-fx",
+      "source": "./plugins/plan-progress-fx",
+      "description": "Animated rainbow plan progress bars under the prompt, beside the limit rings"
+    }
+  ]
+}
