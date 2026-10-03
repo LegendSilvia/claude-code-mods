@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, Timer } from 'claude-code'
 
 import type { AgentRun, Plan, PlanStage, PlanState, PlanStep, StepStatus } from '../types'
 
@@ -472,6 +472,8 @@ const isWide = (list: Plan[], cols: number) => {
 
 // what the band last drew, so the frame clock can repaint it between renders
 let band: { requestId: string; bars: { key: string; plan: Plan; cols: number }[] } | null = null
+// whether the terminal last laid the bars out narrow, where narrowOpen shows them, not isOpen
+let isNarrowLine = false
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const easeOut = (k: number) => 1 - Math.pow(1 - clamp01(k), 3)
@@ -649,14 +651,22 @@ function plural(n: number, word: string) {
 
 // ---------- engine glue ----------
 
-// the engine's player first (afplay on macOS); PowerShell where it cannot play
+// a Windows host: the paths the engine hands out start with a drive letter there
+const isWindowsPath = (path: string) => /^[A-Za-z]:[\\/]/.test(path)
+
+// the engine's player (afplay on macOS), PowerShell where it cannot play; on Windows the player
+// resolves without a sound, so PowerShell plays there straight away
 function play($: EngineInterface, name: 'decision' | 'error' | 'done') {
-  const file = `${$.plugin.root}/sounds/${name}.wav`.replace(/\//g, '\\')
-  void $.audio.play({ asset: `sounds/${name}.wav` }).catch(() =>
+  // a quote in the path is doubled for PowerShell's single-quoted string
+  const file = `${$.plugin.root}/sounds/${name}.wav`.replace(/\//g, '\\').replace(/'/g, "''")
+  const powershell = () =>
     $.process
       .run(['powershell', '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', `(New-Object Media.SoundPlayer '${file}').PlaySync()`], { timeoutMs: 5000 })
-      .catch(() => undefined),
-  )
+      .catch(() => undefined)
+  void $.session
+    .root()
+    .then(root => (isWindowsPath(root) ? powershell() : $.audio.play({ asset: `sounds/${name}.wav` }).catch(powershell)))
+    .catch(() => undefined)
 }
 
 // the agents bar is the mod's own; the model never owes it an update
@@ -973,32 +983,42 @@ export const register: Register = on => {
 
   on('command.run', { command: 'progress' }, async $ => {
     if ((await read($, plans)).length === 0) return { text: 'No plan yet. /progress-demo shows a sample.' }
-    const open = await read($, isOpen)
-    await update($, isOpen, () => !open)
+    // the flag the line under the prompt draws by, as the Progress toggle flips it
+    const open = isNarrowLine ? await read($, narrowOpen) : await read($, isOpen)
+    await (isNarrowLine ? update($, narrowOpen, () => !open) : update($, isOpen, () => !open))
 
     return { text: open ? 'Progress bars hidden.' : 'Progress bars shown.' }
   })
 
+  // the running demo's steps; a demo started again cancels them, or both walk the one bar
+  let demoSteps: Timer[] = []
   on('command.run', { command: 'progress-demo' }, async $ => {
+    for (const t of demoSteps) t.cancel()
+    demoSteps = []
     const demo = DEMO(await $.clock.now())
     await putPlan($, demo)
     await update($, isOpen, () => true)
     // walk the sample to the end, so the glide, shimmer and finishing burst all show
     const left = demo.stages.flatMap(s => s.steps).filter(s => !isFinished(s.status)).length
     for (let i = 1; i <= left; i++) {
-      $.clock.after(i * 900, async () => {
+      const step = $.clock.after(i * 900, async () => {
         const cur = (await read($, plans)).find(p => p.id === 'demo')
         if (!cur || cur.state === 'done') return
         const stages = applyOps(cur.stages, { next: true })
         const isLast = stages.flatMap(s => s.steps).every(s => isFinished(s.status))
         await putPlan($, { ...cur, stages, state: isLast ? 'done' : 'running' })
       })
+      demoSteps.push(step)
     }
 
     return { text: 'Sample plan running under the prompt.' }
   })
 
   on('command.run', { command: 'progress-clear' }, async $ => {
+    // as dropPlan does per bar: a bar made after this starts fresh, not gliding from the old one
+    lastHead.clear()
+    anims.clear()
+    lastStrip.clear()
     await update($, plans, () => [])
 
     return { text: 'Progress bars removed.' }
@@ -1066,6 +1086,7 @@ export const register: Register = on => {
     const Raster = e.surface === 'terminal' && 'Raster' in t ? t.Raster : null
     const cols = lineColumns(e.viewport?.columns ?? 100, dock)
     const wide = isWide(list, cols)
+    if (e.surface === 'terminal') isNarrowLine = !wide
     if (!Raster || list.length === 0 || !(wide ? await read($, isOpen) : await read($, narrowOpen))) {
       if (e.surface === 'terminal') band = null
       return next(e)

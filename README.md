@@ -8,7 +8,7 @@ Stylish HUD mods for the Claude Code terminal, drawn under the prompt.
 | Plugin | What it draws |
 | --- | --- |
 | **limit-bars** | Four braille rings, filled clockwise with the percentage inside: **context** (green → amber → red), **session** 5-hour limit (cyan → violet), **weekly** limit (pink → orange) and **Fable** weekly limit (mint → blue). A light orbits each filled arc; a ring pulses red past 80% (context) or 90% (limits). Beside them: model with its effort level (italic, shading violet → pink from low to max), workspace folder, tokens used and when the session limit resets (↻ 4:30 PM). |
-| **plan-progress-fx** | Animated rainbow progress bars for multi-step tasks, with gradient titles and percentages, placed to the right of the rings. On a narrow terminal they stay collapsed until you open them with **◉ Progress**, and then take the rings' place. |
+| **plan-progress-fx** | Animated rainbow progress bars for multi-step tasks, with gradient titles and percentages, placed to the right of the rings. On a narrow terminal they stay collapsed until you open them with **◉ Progress**, and then take the rings' place. It also changes how Claude works so the bars stay current; see [below](#how-plan-progress-fx-steers-claude). |
 | **reply-highlight** | Sets Claude's replies apart in the transcript: a rainbow edge down the left (red at the top of each block to violet at the bottom) and a violet tint behind them. Text keeps the terminal's colour; what Claude **bolds**, and headings, run through a rainbow letter by letter. Code blocks and tables keep Claude Code's own drawing inside the panel. |
 | **backlog-pane** | A side pane for the project: its **git status** on top (branch, ahead/behind, changed files coloured by kind), shown in any git repository, then its [Backlog.md](https://github.com/MrLesk/Backlog.md) tasks when it has a `backlog/` folder (in its root, or a parent inside the same repository). Tasks **in progress** carry a rainbow bar of checked acceptance criteria and a **✓ done** button; the **backlog** list has **▸ start** buttons; priority, type and first label sit in front of each title; a box at the bottom creates a task. Buttons run the `backlog` CLI, so files stay as Backlog.md writes them. Rereads every few seconds; `/backlog` reopens it. |
 
@@ -42,6 +42,15 @@ Restart Claude Code. If you use a `statusLine` command in `settings.json` that s
 | `/progress-demo` | Run a sample plan |
 | `/progress-sounds` | Play the decision, error and done sounds |
 | `/progress-clear` | Remove all bars |
+
+### How plan-progress-fx steers Claude
+
+The bars only move when Claude reports progress, so this plugin changes what Claude does, not just what the terminal draws:
+
+- **Rules in the system prompt.** Every session it adds a short section telling Claude to create a bar (through the plugin's `plan_progress` tool) for any task needing more than about three edits or commands, to update it as steps finish, and to mark it "needs input" before asking you to decide.
+- **One refused call per turn.** While no bar is open, the 4th file-changing `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Bash` or `PowerShell` call of a turn is refused once, with a message telling Claude to create a bar first. Read-only shell calls (`ls`, `git status`, `grep`) don't count, and subagents are never refused.
+- **Sent back once at the end of a turn.** If the turn did work and a bar is still open when Claude stops, Claude is sent back once to update it. A reply that ends in a question marks the bar as waiting on you instead.
+- **Reminders.** With a bar open, every six changing calls without an update add a one-line reminder to the tool result, and each prompt you send carries one line naming the open bars.
 
 ## Develop
 
