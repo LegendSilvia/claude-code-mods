@@ -111,7 +111,10 @@ export function parseFx(args: string): { kind: 'show' } | { kind: 'set'; part: P
 }
 
 const settings = atom({ plugin: 'transcript-fx', key: 'settings' } as const, DEFAULTS)
-const endedAt = atom({ plugin: 'transcript-fx', key: 'endedAt' } as const, {} as Record<string, number>)
+// when the last main-loop turn ended; written at turn.complete, since drawing may not write state
+const lastEnd = atom({ plugin: 'transcript-fx', key: 'lastEnd' } as const, null as number | null)
+// a footer first drawn this long after a turn ended is an older one: it shows no time rather than a wrong one
+const FRESH_MS = 10_000
 const USAGE = `Usage: /fx [${PARTS.join('|')}] [on|off]`
 
 const isOn = async ($: EngineInterface, part: Part) => (await read($, settings))[part]
@@ -144,6 +147,17 @@ const status = (p: { isRunning: boolean; isErrored: boolean; isInterrupted: bool
         : { glyph: '✓', color: OK, dim: false }
 
 export const register: Register = on => {
+  // each footer's end time; a reload starts it over, and older footers then show no time
+  const footerAt = new Map<string, number>()
+
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId === undefined) {
+      const now = await $.clock.now()
+      await update($, lastEnd, () => now)
+    }
+    return next(e)
+  })
+
   on('session.start', async ($, e, next) => {
     const saved = await $.store.get('settings')
     if (saved && typeof saved === 'object') await update($, settings, () => ({ ...DEFAULTS, ...(saved as Partial<Settings>) }))
@@ -260,6 +274,35 @@ export const register: Register = on => {
           </Box>
           <Box width={1} flexShrink={0} />
           {edge(Box, colors, 'right')}
+        </Box>
+      )
+    } catch {
+      return next(e)
+    }
+  })
+
+  on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
+    if (e.surface !== 'terminal' || !(await isOn($, 'footer'))) return next(e)
+    try {
+      const { Box, Text } = $.ui.resolve(e)
+      // the first drawing takes the turn's end time, kept here so a later redraw shows the same
+      if (!footerAt.has(e.requestId)) {
+        const end = await read($, lastEnd)
+        if (end !== null && (await $.clock.now()) - end < FRESH_MS) footerAt.set(e.requestId, end)
+      }
+      const at = footerAt.get(e.requestId)
+      const word = e.props.word.toLowerCase()
+      return (
+        <Box flexDirection="row" gap={1}>
+          <Text color={VIOLET}>✦</Text>
+          <Text bold>
+            {[...word].map((ch, i) => (
+              <Text key={`w-${i}`} color={rainbow((i / Math.max(1, word.length)) * 300)}>
+                {ch}
+              </Text>
+            ))}
+          </Text>
+          <Text dimColor>{`in ${fmtDuration(e.props.durationMs)}${at === undefined ? '' : ` · ${fmtClock(at)}`}`}</Text>
         </Box>
       )
     } catch {

@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 import { DEFAULTS, GOLD_HI, GOLD_LO, fmtClock, fmtDuration, goldEdge, groupLine, iconFor, parseFx, relPath, summarize, toolLabel, truncate } from './register'
 
@@ -212,4 +212,40 @@ test('notifications and other senders keep the engine drawing', async ($, on) =>
     const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'UserMessage', props: MSG(kind) })
     expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
   }
+})
+
+const AT_342 = new Date(2026, 9, 3, 15, 42).getTime()
+
+// a main-loop turn ends, as the engine raises it; the test answers beneath the plugin
+const endTurn = async ($: any, on: any) => {
+  on('turn.complete', () => ({ text: '' }))
+  await $.turn.complete({ answer: '', durationMs: 1_000, isAborted: false, turnId: 'turn', reason: 'answer' })
+}
+
+test('the footer reads star, rainbow word, duration and the time it ended', async ($, on) => {
+  mock.clock(on, { now: AT_342 })
+  engineDraws(on, 'TurnDuration')
+  await endTurn($, on)
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Baked', durationMs: 170_000 }, requestId: 'turn-1' })
+  expect(await ui.find({ type: 'Text', text: '✦' })).toMatchObject({ props: { color: '#b388ff' } })
+  expect(await ui.find({ type: 'Text', text: 'b' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'in 2m 50s · 3:42 PM' })).toBeDefined()
+})
+
+test('a footer drawn again keeps its first time', async ($, on) => {
+  const clock = mock.clock(on, { now: AT_342 })
+  engineDraws(on, 'TurnDuration')
+  await endTurn($, on)
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Baked', durationMs: 3_000 }, requestId: 'turn-2' })
+  expect(await ui.find({ type: 'Text', text: 'in 3s · 3:42 PM' })).toBeDefined()
+  await clock.advance(5 * 60_000)
+  await ui.redraw()
+  expect(await ui.find({ type: 'Text', text: 'in 3s · 3:42 PM' })).toBeDefined()
+})
+
+test('a footer with no turn just ended shows its duration and no time, never a wrong one', async ($, on) => {
+  mock.clock(on, { now: AT_342 })
+  engineDraws(on, 'TurnDuration')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Baked', durationMs: 3_000 }, requestId: 'turn-old' })
+  expect(await ui.find({ type: 'Text', text: 'in 3s' })).toBeDefined()
 })
