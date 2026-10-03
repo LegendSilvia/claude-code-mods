@@ -293,14 +293,18 @@ test('Enter pressed twice while a task is being created creates it once', async 
   expect(runs.filter(r => r.includes('create')).length).toBe(1)
 })
 
-test('each section sits in a rounded card in its colour, its title set into the top edge', async ($, on) => {
+test('each section sits in a rounded card in its colour, its title on the first row inside', async ($, on) => {
   mock.clock(on)
   project(on)
   await $.command.run({ command: 'backlog', ...RUN })
   const ui = await $.ui.mount(PANE)
   expect(await ui.find({ type: 'Box', key: 'card-git' })).toMatchObject({ props: { borderStyle: 'round', borderColor: '#69f0ae', paddingX: 1 } })
   expect(await ui.find({ type: 'Box', key: 'card-To Do' })).toMatchObject({ props: { borderStyle: 'round', borderColor: '#b388ff' } })
-  expect(await ui.find({ type: 'Box', key: 'title-To Do' })).toMatchObject({ props: { position: 'absolute', top: -1, left: 0 } })
-  expect(await ui.find({ type: 'Box', key: 'count-To Do' })).toMatchObject({ props: { position: 'absolute', top: -1, right: 0 } })
+  // the border draws over anything laid on it, so the title is the card's first row, inside it
+  const head = (await ui.find({ type: 'Box', key: 'head-To Do' })) as { props: Record<string, unknown> } | undefined
+  expect(head?.props.position).toBeUndefined()
+  expect(head).toMatchObject({ props: { flexDirection: 'row', justifyContent: 'space-between' } })
+  expect(await ui.find({ type: 'Text', text: /Backlog/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /⎇ main/ })).toBeDefined()
   expect(await ui.find({ type: 'Box', key: 'card-new' })).toMatchObject({ props: { borderStyle: 'round' } })
 })

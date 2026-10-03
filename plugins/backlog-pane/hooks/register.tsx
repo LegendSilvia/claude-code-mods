@@ -387,25 +387,14 @@ export const register: Register = on => {
     const note = await read($, flash)
     const now = await $.clock.now()
     const cols = Math.max(20, e.props.bodyColumns ?? 40)
-    // a rounded card in one colour; the title and the count lie over its top edge, past the corners
+    // a rounded card in one colour, its title and count on the first row inside: the border
+    // draws over anything laid on it, so a title set into the edge never shows
     const card = (id: string, color: string, title: unknown, count: unknown, body: unknown) => (
       <Box key={`card-${id}`} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1} marginBottom={1}>
         {title ? (
-          <Box key={`title-${id}`} position="absolute" top={-1} left={0}>
-            <Text>
-              <Text color={color}>─ </Text>
-              {title}
-              <Text> </Text>
-            </Text>
-          </Box>
-        ) : null}
-        {count ? (
-          <Box key={`count-${id}`} position="absolute" top={-1} right={0}>
-            <Text>
-              <Text> </Text>
-              {count}
-              <Text color={color}> ─</Text>
-            </Text>
+          <Box key={`head-${id}`} flexDirection="row" justifyContent="space-between" gap={1}>
+            <Box flexShrink={1}>{title}</Box>
+            {count ? <Box flexShrink={0}>{count}</Box> : null}
           </Box>
         ) : null}
         {body}
@@ -461,7 +450,7 @@ export const register: Register = on => {
     // in-progress kinds first, then the rest in the board's own order
     const order = [...open.filter(s => ACTIVE.test(s)), ...open.filter(s => !ACTIVE.test(s))]
     const done = b.tasks.filter(t => DONE.test(t.status)).length
-    let room = Math.max(6, (e.viewport?.rows ?? 30) - 8 - (g ? gitRows + 3 : 0))
+    let room = Math.max(6, (e.viewport?.rows ?? 30) - 9 - (g ? gitRows + 4 : 0))
 
     const sections = order.map(status => {
       const list = b.tasks.filter(t => t.status === status)
@@ -469,9 +458,9 @@ export const register: Register = on => {
       const style = STYLE[kind]
       const label = kind === 'todo' ? 'Backlog' : status
       const perTask = kind === 'active' ? 4 : 1
-      const fits = Math.max(1, Math.floor((room - 3) / perTask))
+      const fits = Math.max(1, Math.floor((room - 4) / perTask))
       const shown = list.slice(0, fits)
-      room -= 3 + shown.length * perTask
+      room -= 4 + shown.length * perTask
       return card(
         status,
         style.color,
