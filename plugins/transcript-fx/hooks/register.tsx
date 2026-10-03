@@ -102,6 +102,43 @@ export function fmtClock(ms: number): string {
   return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
 }
 
+export const BAR = 10
+const FRAME_MS = 80
+const LIT = 4
+const DIM_RGB = 0x4a4458
+const DEFAULT_BG = 0x01000000
+
+// which cells are lit at time t: a run of LIT cells entering at the left and leaving at the right
+const lit = (t: number) => {
+  const head = Math.floor(t / FRAME_MS) % (BAR + LIT)
+  return (i: number) => head - i >= 0 && head - i < LIT
+}
+
+export const barGlyphs = (t: number) => Array.from({ length: BAR }, (_, i) => (lit(t)(i) ? '▰' : '▱')).join('')
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+// the cells are a multiple of 12 bytes, so there is never padding (as plan-progress-fx)
+function base64(bytes: Uint8Array): string {
+  let out = ''
+  for (let i = 0; i < bytes.length; i += 3) {
+    const n = ((bytes[i] ?? 0) << 16) | ((bytes[i + 1] ?? 0) << 8) | (bytes[i + 2] ?? 0)
+    out += B64[(n >> 18) & 63]! + B64[(n >> 12) & 63]! + B64[(n >> 6) & 63]! + B64[n & 63]!
+  }
+  return out
+}
+
+// one frame of the bar as a Raster's cells: lit cells take the rainbow at their place
+export function barCells(t: number): string {
+  const on = lit(t)
+  const words = new Uint32Array(BAR * 3)
+  for (let i = 0; i < BAR; i++) {
+    words[i * 3] = on(i) ? 0x25b0 : 0x25b1
+    words[i * 3 + 1] = on(i) ? parseInt(rainbow((i / (BAR - 1)) * 300).slice(1), 16) : DIM_RGB
+    words[i * 3 + 2] = DEFAULT_BG
+  }
+  return base64(new Uint8Array(words.buffer))
+}
+
 export function parseFx(args: string): { kind: 'show' } | { kind: 'set'; part: Part; on: boolean } | { kind: 'error' } {
   const words = args.trim().toLowerCase().split(/\s+/).filter(Boolean)
   if (words.length === 0) return { kind: 'show' }
@@ -149,6 +186,8 @@ const status = (p: { isRunning: boolean; isErrored: boolean; isInterrupted: bool
 export const register: Register = on => {
   // each footer's end time; a reload starts it over, and older footers then show no time
   const footerAt = new Map<string, number>()
+  // spinners on screen, repainted in place each frame without a render pass
+  const spinners = new Set<string>()
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
@@ -162,6 +201,12 @@ export const register: Register = on => {
     const saved = await $.store.get('settings')
     if (saved && typeof saved === 'object') await update($, settings, () => ({ ...DEFAULTS, ...(saved as Partial<Settings>) }))
     await $.command.register({ name: 'fx', description: 'Show or toggle transcript-fx parts' })
+    $.clock.every(FRAME_MS, async () => {
+      if (spinners.size === 0) return
+      const cells = barCells(await $.clock.now())
+      // a spinner that is gone refuses the blit and leaves the set
+      for (const requestId of spinners) void $.ui.blit({ requestId, key: 'bar', cells }).catch(() => spinners.delete(requestId))
+    })
     return next(e)
   })
 
@@ -278,6 +323,24 @@ export const register: Register = on => {
       )
     } catch {
       return next(e)
+    }
+  })
+
+  on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
+    if (e.surface !== 'terminal' || !(await isOn($, 'spinner'))) return next(e)
+    // the engine's line keeps the time and tokens no prop carries
+    const drawn = await next(e)
+    try {
+      const { Box, Raster } = $.ui.resolve(e)
+      spinners.add(e.requestId)
+      return (
+        <Box flexDirection="row" gap={1}>
+          <Raster key="bar" columns={BAR} rows={1} cells={barCells(await $.clock.now())} />
+          {drawn}
+        </Box>
+      )
+    } catch {
+      return drawn
     }
   })
 

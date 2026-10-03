@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { DEFAULTS, GOLD_HI, GOLD_LO, fmtClock, fmtDuration, goldEdge, groupLine, iconFor, parseFx, relPath, summarize, toolLabel, truncate } from './register'
+import { BAR, DEFAULTS, GOLD_HI, GOLD_LO, fmtClock, fmtDuration, goldEdge, groupLine, iconFor, parseFx, relPath, summarize, toolLabel, truncate, barCells, barGlyphs } from './register'
 
 const RUN = { args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 200 } }
 
@@ -248,4 +248,21 @@ test('a footer with no turn just ended shows its duration and no time, never a w
   engineDraws(on, 'TurnDuration')
   const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Baked', durationMs: 3_000 }, requestId: 'turn-old' })
   expect(await ui.find({ type: 'Text', text: 'in 3s' })).toBeDefined()
+})
+
+test('the spinner bar sweeps four lit cells across ten', async () => {
+  expect(barGlyphs(0)).toBe('▰▱▱▱▱▱▱▱▱▱')
+  expect(barGlyphs(3 * 80)).toBe('▰▰▰▰▱▱▱▱▱▱')
+  expect(barGlyphs(9 * 80)).toBe('▱▱▱▱▱▱▰▰▰▰')
+  expect([...barGlyphs(12345)].length).toBe(BAR)
+  // 10 cells × 3 u32 × 4 bytes = 120 bytes = 160 base64 characters
+  expect(barCells(0).length).toBe(160)
+})
+
+test('the spinner keeps the engine line beside the bar', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  engineDraws(on, 'Spinner')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'Spinner', props: { word: 'Baking', message: null, suffix: '…', mode: 'responding' } })
+  expect(await ui.find({ type: 'Raster', key: 'bar' })).toMatchObject({ props: { columns: 10, rows: 1 } })
+  expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
 })
