@@ -157,9 +157,10 @@ export function ringCells(t: number): string {
   return base64(new Uint8Array(words.buffer))
 }
 
-export function parseFx(args: string): { kind: 'show' } | { kind: 'set'; part: Part; on: boolean } | { kind: 'error' } {
+export function parseFx(args: string): { kind: 'show' } | { kind: 'debug' } | { kind: 'set'; part: Part; on: boolean } | { kind: 'error' } {
   const words = args.trim().toLowerCase().split(/\s+/).filter(Boolean)
   if (words.length === 0) return { kind: 'show' }
+  if (words.length === 1 && words[0] === 'debug') return { kind: 'debug' }
   const [part, value] = words
   if (words.length !== 2 || !PARTS.includes(part as Part) || (value !== 'on' && value !== 'off')) return { kind: 'error' }
   return { kind: 'set', part: part as Part, on: value === 'on' }
@@ -222,8 +223,8 @@ const status = (p: { isRunning: boolean; isErrored: boolean; isInterrupted: bool
 export const register: Register = on => {
   // each footer's end time, null for one that is not the last turn's; a reload starts it over
   const footerAt = new Map<string, number | null>()
-  // when each footer was first drawn
-  const footerSeen = new Map<string, number>()
+  // when each footer was first drawn, and the duration it showed
+  const footerSeen = new Map<string, { seen: number; durationMs: number }>()
   // spinners on screen, repainted in place each frame without a render pass
   const spinners = new Set<string>()
   // tool calls drawn as rows of an expanded group, which show their results inline
@@ -263,6 +264,17 @@ export const register: Register = on => {
   on('command.run', { command: 'fx' }, async ($, e) => {
     const cmd = parseFx(e.args)
     if (cmd.kind === 'error') return { text: USAGE }
+    if (cmd.kind === 'debug') {
+      // what the footer clock went by: the last turn's end, and each recent footer's first drawing and decision
+      const end = await read($, lastEnd)
+      const lines = [`last turn end: ${end === null ? 'none' : `${fmtClock(end.at)}, ${fmtDuration(end.durationMs)} (${end.durationMs} ms)`}`]
+      for (const [id, f] of [...footerSeen].slice(-5)) {
+        const at = footerAt.get(id)
+        const decided = at === undefined ? 'waiting' : at === null ? 'no time' : fmtClock(at)
+        lines.push(`footer ${id}: first drawn ${fmtClock(f.seen)}, ${fmtDuration(f.durationMs)} (${f.durationMs} ms) → ${decided}`)
+      }
+      return { text: lines.join('\n') }
+    }
     if (cmd.kind === 'set') {
       const now = { ...(await read($, settings)), [cmd.part]: cmd.on }
       await update($, settings, () => now)
@@ -465,9 +477,9 @@ export const register: Register = on => {
       // first appeared, with its duration; once that window has passed it settles on no time, so a later turn
       // never stamps an older footer
       const now = await $.clock.now()
-      if (!footerSeen.has(e.requestId)) footerSeen.set(e.requestId, now)
+      if (!footerSeen.has(e.requestId)) footerSeen.set(e.requestId, { seen: now, durationMs: e.props.durationMs })
       if (!footerAt.has(e.requestId)) {
-        const seen = footerSeen.get(e.requestId)!
+        const { seen } = footerSeen.get(e.requestId)!
         const end = await read($, lastEnd)
         const isThisTurn = end !== null && Math.abs(end.at - seen) < FRESH_MS && Math.abs(end.durationMs - e.props.durationMs) < SAME_TURN_MS
         if (isThisTurn) footerAt.set(e.requestId, end.at)

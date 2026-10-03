@@ -436,3 +436,25 @@ test('the spinner has a blank line above it', async ($, on) => {
   const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'Spinner', props: { word: 'Slithering', message: null, suffix: '…', mode: 'responding' } })
   expect(await ui.find({ type: 'Box', key: 'spinner' })).toMatchObject({ props: { marginTop: 1 } })
 })
+
+test('/fx debug is its own command', async () => {
+  expect(parseFx('debug')).toEqual({ kind: 'debug' })
+  expect(parseFx('DEBUG')).toEqual({ kind: 'debug' })
+  expect(parseFx('debug on')).toEqual({ kind: 'error' })
+})
+
+test('/fx debug reports the last turn end and what each recent footer decided', async ($, on) => {
+  const clock = mock.clock(on, { now: AT_342 })
+  answersTurns(on)
+  engineDraws(on, 'TurnDuration')
+  const before = await $.command.run({ command: 'fx', ...RUN, args: 'debug' })
+  expect(before.text).toContain('last turn end: none')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Worked', durationMs: 710_000 }, requestId: 'turn-dbg' })
+  await clock.advance(50)
+  await endTurn($, 712_500)
+  await ui.redraw()
+  const after = (await $.command.run({ command: 'fx', ...RUN, args: 'debug' })).text
+  expect(after).toContain('last turn end: 3:42 PM, 11m 52s')
+  expect(after).toContain('footer turn-dbg: first drawn 3:42 PM, 11m 50s')
+  expect(after).toMatch(/turn-dbg.*(waiting|no time|3:42 PM)$/m)
+})

@@ -50,7 +50,8 @@ Restart Claude Code. If you use a `statusLine` command in `settings.json` that s
 | Command | Does |
 | --- | --- |
 | `/fx` | List the parts and whether each is on |
-| `/fx <part> on\|off` | Turn one part on or off: `tools`, `spinner`, `prompts`, `footer`, `rule` (remembered across sessions) |
+| `/fx <part> on
+| `/fx debug` | Show what the footer clock went by: the last turn's end and each recent footer's first drawing and decision |\|off` | Turn one part on or off: `tools`, `spinner`, `prompts`, `footer`, `rule` (remembered across sessions) |
 
 The footer's clock time is taken when the turn ends; footers already on screen when the plugin reloads show only their duration.
 
