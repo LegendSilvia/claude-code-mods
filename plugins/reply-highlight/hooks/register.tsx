@@ -35,7 +35,7 @@ export const rainbowColors = (text: string) => {
   return [...text].map((ch, i) => ({ ch, color: rainbow((i / Math.max(1, n)) * 300) }))
 }
 
-export type Span = { text: string; kind: 'plain' | 'bold' | 'italic' | 'code' | 'link' }
+export type Span = { text: string; kind: 'plain' | 'bold' | 'bold-italic' | 'italic' | 'code' | 'link'; url?: string }
 export type Line = { kind: 'blank' | 'heading' | 'item' | 'quote' | 'text'; prefix: string; spans: Span[] }
 
 // fenced code and tables keep Claude Code's own drawing; everything else is drawn here in gold
@@ -43,18 +43,31 @@ export const isProse = (text: string) => !/^\s*```/m.test(text) && !/^\s*\|.*\|\
 
 export function spans(text: string): Span[] {
   const out: Span[] = []
-  const re = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\([^)]+\)|(?<![\w*])\*([^*\s][^*]*)\*(?!\w)|(?<!\w)_([^_\s][^_]*)_(?!\w)/g
+  const re = /\*\*\*([^*]+)\*\*\*|\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)|(?<![\w*])\*([^*\s][^*]*)\*(?!\w)|(?<!\w)_([^_\s][^_]*)_(?!\w)/g
   let at = 0
   for (const m of text.matchAll(re)) {
     if (m.index! > at) out.push({ text: text.slice(at, m.index), kind: 'plain' })
-    if (m[1] !== undefined) out.push({ text: m[1], kind: 'bold' })
-    else if (m[2] !== undefined) out.push({ text: m[2], kind: 'code' })
-    else if (m[3] !== undefined) out.push({ text: m[3], kind: 'link' })
-    else out.push({ text: (m[4] ?? m[5])!, kind: 'italic' })
+    if (m[1] !== undefined) out.push({ text: m[1], kind: 'bold-italic' })
+    else if (m[2] !== undefined) out.push({ text: m[2], kind: 'bold' })
+    else if (m[3] !== undefined) out.push({ text: m[3], kind: 'code' })
+    else if (m[4] !== undefined) out.push({ text: m[4], kind: 'link', url: m[5] })
+    else out.push({ text: (m[6] ?? m[7])!, kind: 'italic' })
     at = m.index! + m[0].length
   }
   if (at < text.length) out.push({ text: text.slice(at), kind: 'plain' })
   return out
+}
+
+// the href a Link takes (https, or http on localhost, printable ASCII with no raw @, as URL spells
+// it); null for any other, whose URL is then drawn as text beside the link's
+export function linkHref(url: string): string | null {
+  try {
+    const u = new URL(url)
+    if (u.protocol !== 'https:' && !(u.protocol === 'http:' && u.hostname === 'localhost')) return null
+    return /^[!-?A-~]{1,2048}$/.test(u.href) ? u.href : null
+  } catch {
+    return null
+  }
 }
 
 export function lines(text: string): Line[] {
@@ -79,12 +92,12 @@ export function lines(text: string): Line[] {
 export const register: Register = on => {
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     if (e.surface !== 'terminal') return next(e)
-    const { Box, Text } = $.ui.resolve(e)
+    const { Box, Link, Text } = $.ui.resolve(e)
     const prose = isProse(e.props.text)
     const drawn = prose ? null : await next(e)
 
-    const bow = (text: string, key: string, extra: { underline?: boolean } = {}) => (
-      <Text key={key} bold underline={extra.underline}>
+    const bow = (text: string, key: string, extra: { underline?: boolean; italic?: boolean } = {}) => (
+      <Text key={key} bold underline={extra.underline} italic={extra.italic}>
         {rainbowColors(text).map((c, i) => (
           <Text key={`${key}-${i}`} color={c.color}>
             {c.ch}
@@ -97,6 +110,8 @@ export const register: Register = on => {
       switch (s.kind) {
         case 'bold':
           return bow(s.text, key)
+        case 'bold-italic':
+          return bow(s.text, key, { italic: true })
         case 'italic':
           return (
             <Text key={key} italic>
@@ -109,12 +124,22 @@ export const register: Register = on => {
               {s.text}
             </Text>
           )
-        case 'link':
-          return (
-            <Text key={key} underline color={ACCENT}>
-              {s.text}
+        case 'link': {
+          // drawn here, so the URL would be lost: a Link keeps it, else it shows beside the text
+          const href = s.url === undefined ? null : linkHref(s.url)
+          const label = (
+            <Text underline color={ACCENT}>
+              {href || s.url === undefined || s.url === s.text ? s.text : `${s.text} (${s.url})`}
             </Text>
           )
+          return href ? (
+            <Link key={key} href={href}>
+              {label}
+            </Link>
+          ) : (
+            <Text key={key}>{label}</Text>
+          )
+        }
         default:
           return <Text key={key}>{s.text}</Text>
       }

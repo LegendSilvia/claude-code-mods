@@ -9,12 +9,56 @@ test('inline markdown splits into spans', async () => {
     { text: ' ', kind: 'plain' },
     { text: 'c', kind: 'code' },
     { text: ' ', kind: 'plain' },
-    { text: 'd', kind: 'link' },
+    { text: 'd', kind: 'link', url: 'http://x' },
     { text: ' ', kind: 'plain' },
     { text: 'e', kind: 'italic' },
     { text: ' f', kind: 'plain' },
   ])
   expect(spans('snake_case_name stays plain')).toEqual([{ text: 'snake_case_name stays plain', kind: 'plain' }])
+})
+
+test('bold italic is one span, with no stray asterisks', async () => {
+  expect(spans('a ***b c*** **d** *e*')).toEqual([
+    { text: 'a ', kind: 'plain' },
+    { text: 'b c', kind: 'bold-italic' },
+    { text: ' ', kind: 'plain' },
+    { text: 'd', kind: 'bold' },
+    { text: ' ', kind: 'plain' },
+    { text: 'e', kind: 'italic' },
+  ])
+})
+
+test('a link becomes a Link where its URL can be one, else its URL shows beside the text', async ($, on) => {
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  const ui = await $.ui.mount({
+    plugin: 'reply-highlight',
+    surface: 'terminal',
+    component: 'AssistantMessage',
+    props: { text: 'see [the docs](https://example.com/a b), [notes](ftp://host/f) and [http://example.com](http://example.com)', isFirstOfReply: true },
+  })
+  const link = await ui.find({ type: 'Link' })
+  expect(link).toMatchObject({ props: { href: 'https://example.com/a%20b' } })
+  expect(link?.text).toContain('the docs')
+  expect(await ui.find({ type: 'Text', text: 'notes (ftp://host/f)' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /and http:\/\/example\.com$/ })).toBeDefined()
+})
+
+test('bold italic draws without its asterisks', async ($, on) => {
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  const ui = await $.ui.mount({
+    plugin: 'reply-highlight',
+    surface: 'terminal',
+    component: 'AssistantMessage',
+    props: { text: 'a ***big*** deal', isFirstOfReply: true },
+  })
+  expect(await ui.find({ type: 'Text', text: /big/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /\*/ })).toBeUndefined()
 })
 
 test('block lines keep headings, bullets, numbers and quotes', async () => {

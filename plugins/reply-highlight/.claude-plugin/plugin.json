@@ -1,6 +1,6 @@
 {
   "name": "reply-highlight",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Sets Claude's replies apart in the transcript: a rainbow edge, a violet tint, and bold text and headings in a rainbow",
   "author": {
     "name": "LegendSilvia",
