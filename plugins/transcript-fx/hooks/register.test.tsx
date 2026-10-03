@@ -458,3 +458,12 @@ test('/fx debug reports the last turn end and what each recent footer decided', 
   expect(after).toContain('footer turn-dbg: first drawn 3:42 PM, 11m 50s')
   expect(after).toMatch(/turn-dbg.*(waiting|no time|3:42 PM)$/m)
 })
+
+test('a folded group of one call shows what it ran and how it ended', async ($, on) => {
+  engineDraws(on, 'ToolGroup')
+  const calls = [{ tool_use_id: 'one', tool: 'PowerShell', input: { command: 'ollama ps\nmore' }, isRunning: false, isErrored: false, isInterrupted: false, result: 'ok' }]
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolGroup', props: { calls, isActive: false, isExpanded: false } as any })
+  expect(await ui.find({ type: 'Text', text: 'PowerShell' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'ollama ps' })).toMatchObject({ props: { wrap: 'truncate-end' } })
+  expect(await ui.find({ type: 'Text', text: '✓' })).toBeDefined()
+})

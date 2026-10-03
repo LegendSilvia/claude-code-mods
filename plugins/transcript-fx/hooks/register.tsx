@@ -349,16 +349,31 @@ export const register: Register = on => {
     try {
       const { Box, Text } = $.ui.resolve(e)
       const first = e.props.calls[0]?.tool ?? ''
+      // a group of one call reads like that call's own row: what it ran and how it ended
+      const only = e.props.calls.length === 1 ? e.props.calls[0]! : undefined
+      const summary = only ? summarize(only.tool, only.input, await $.session.cwd().catch(() => '')) : ''
+      const s = only ? status(only) : undefined
       return (
         <Box flexDirection="row">
           {edge(Box, goldEdge(2), 'left')}
           <Box width={1} flexShrink={0} />
           <Box flexGrow={1} flexDirection="row" gap={1} paddingX={1}>
             <Text color={GOLD}>{iconFor(first)}</Text>
+            <Text bold={only !== undefined} color={GOLD} wrap="truncate-end">
+              {groupLine(e.props.calls)}
+            </Text>
             <Box flexGrow={1}>
-              <Text color={GOLD}>{groupLine(e.props.calls)}</Text>
+              <Text dimColor wrap="truncate-end">
+                {summary}
+              </Text>
             </Box>
-            {e.props.isActive ? <Text color={GOLD}>◐</Text> : null}
+            {s ? (
+              <Text color={s.color} dimColor={s.dim}>
+                {s.glyph}
+              </Text>
+            ) : e.props.isActive ? (
+              <Text color={GOLD}>◐</Text>
+            ) : null}
           </Box>
         </Box>
       )
