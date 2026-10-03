@@ -11,6 +11,7 @@ Stylish HUD mods for the Claude Code terminal, drawn under the prompt.
 | **plan-progress-fx** | Animated rainbow progress bars for multi-step tasks, with gradient titles and percentages, placed to the right of the rings. On a narrow terminal they stay collapsed until you open them with **◉ Progress**, and then take the rings' place. It also changes how Claude works so the bars stay current; see [below](#how-plan-progress-fx-steers-claude). |
 | **reply-highlight** | Sets Claude's replies apart in the transcript: a rainbow edge down the left (red at the top of each block to violet at the bottom) and a violet tint behind them. Text keeps the terminal's colour; what Claude **bolds**, and headings, run through a rainbow letter by letter. Code blocks and tables keep Claude Code's own drawing inside the panel. |
 | **backlog-pane** | A side pane for the project: its **git status** on top (branch, ahead/behind, changed files coloured by kind), shown in any git repository, then its [Backlog.md](https://github.com/MrLesk/Backlog.md) tasks when it has a `backlog/` folder (in its root, or a parent inside the same repository). Tasks **in progress** carry a rainbow bar of checked acceptance criteria and a **✓ done** button; the **backlog** list has **▸ start** buttons; priority, type and first label sit in front of each title; a box at the bottom creates a task. Buttons run the `backlog` CLI, so files stay as Backlog.md writes them. Rereads every few seconds; `/backlog` reopens it. |
+| **transcript-fx** | Restyles the rest of the transcript to match. Tool calls are gold rows (an icon per kind, a short summary, ✓ / ✗ / ◐ / ⊘) with their results in a gold-edged panel, and folded runs are one gold count line (`Read ×3 · Grep ×2`). Your prompts sit in a teal panel with a rainbow edge on the right. An animated rainbow bar runs in front of the spinner, which keeps its time and tokens. Each turn closes with `✦ baked in 2m 50s · 3:42 PM`, and a rainbow rule sits above the prompt when nothing else uses that band. `/fx` turns each part on or off. |
 
 Each works alone; limit-bars and plan-progress-fx share the line under the prompt when both are installed.
 
@@ -24,6 +25,7 @@ claude plugin install limit-bars@claude-code-mods
 claude plugin install plan-progress-fx@claude-code-mods
 claude plugin install reply-highlight@claude-code-mods
 claude plugin install backlog-pane@claude-code-mods
+claude plugin install transcript-fx@claude-code-mods
 ```
 
 Restart Claude Code. If you use a `statusLine` command in `settings.json` that shows the model, folder or context, you can remove it: limit-bars shows the same.
@@ -43,6 +45,15 @@ Restart Claude Code. If you use a `statusLine` command in `settings.json` that s
 | `/progress-sounds` | Play the decision, error and done sounds |
 | `/progress-clear` | Remove all bars |
 
+### transcript-fx commands
+
+| Command | Does |
+| --- | --- |
+| `/fx` | List the parts and whether each is on |
+| `/fx <part> on\|off` | Turn one part on or off: `tools`, `spinner`, `prompts`, `footer`, `rule` (remembered across sessions) |
+
+The footer's clock time is taken when the turn ends; footers already on screen when the plugin reloads show only their duration.
+
 ### How plan-progress-fx steers Claude
 
 The bars only move when Claude reports progress, so this plugin changes what Claude does, not just what the terminal draws:
@@ -60,6 +71,7 @@ claude plugin test plugins/limit-bars
 claude plugin test plugins/plan-progress-fx
 claude plugin test plugins/reply-highlight
 claude plugin test plugins/backlog-pane
+claude plugin test plugins/transcript-fx
 ```
 
 ## License

@@ -101,8 +101,10 @@ paints its bars, so frames cost no render pass. The timer only blits while a spi
 
 `✦ baked in 2m 50s · 3:42 PM` — `✦` violet, the word lower-cased and run through the rainbow,
 duration formatted like the engine (`3s`, `1m 4s`, `1h 2m`), then the local time the turn ended.
-The time is taken the first time a `requestId` is drawn and kept in `$.state`, so redraws and
-reloads keep it.
+Drawing may not write `$.state`, so `turn.complete` (main loop) records the end time in `lastEnd`.
+A footer first drawn within 10 s of it takes that time and keeps it (module-local, per `requestId`)
+across redraws; a footer first drawn later, such as one already on screen when the plugin reloads,
+shows its duration with no time rather than a wrong one.
 
 ### Prompt rule (`AbovePrompt`, drawn only when empty)
 
@@ -135,12 +137,12 @@ export type Part = 'tools' | 'spinner' | 'prompts' | 'footer' | 'rule'
 export type Settings = Record<Part, boolean>
 declare module 'claude-code' {
   interface PluginState {
-    'transcript-fx': { settings: Settings; endedAt: Record<string, number> }
+    'transcript-fx': { settings: Settings; lastEnd: number | null }
   }
 }
 ```
 
-`endedAt` is capped at the 500 most recent entries.
+`lastEnd` is the clock time the last main-loop turn ended, or null before the first.
 
 ## Layout
 
