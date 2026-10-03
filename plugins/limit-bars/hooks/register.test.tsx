@@ -108,3 +108,39 @@ test('the session reset reads as a clock time today, with the weekday later', as
   expect(resetAt(undefined, now)).toBeNull()
   expect(resetAt('not a date', now)).toBeNull()
 })
+
+// a session started with usage known, its ring repaints counted
+async function started($: any, on: any) {
+  const clock = mock.clock(on)
+  on('session.usage', () => ({ value: { rateLimits: LIMITS, context: { percent: 40, tokens: 80_000, window: 200_000 } } }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('session.root', () => ({ value: 'E:\Dev\proj' }))
+  on('session.start', ($: any, e: any) => ({ cwd: e.cwd }))
+  const blits: string[] = []
+  on('ui.blit', ($: any, e: any) => {
+    blits.push(e.key)
+    return {}
+  })
+  on('ui.render', ($: any, e: any) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text dimColor>? for shortcuts</Text>
+  })
+  await $.session.start({ cwd: 'E:/Dev/proj', surface: 'terminal', isInteractive: true })
+  return { clock, blits }
+}
+
+const hint = (isWorking: boolean) => ({ plugin: 'limit-bars', surface: 'terminal' as const, component: 'PromptHint' as const, props: { isDraft: false, isWorking, hint: '? for shortcuts' } })
+
+test('the rings hold still while Claude is idle, so typing never pays for their animation', async ($, on) => {
+  const { clock, blits } = await started($, on)
+  await $.ui.mount(hint(false))
+  await clock.advance(1000)
+  expect(blits.length).toBe(0)
+})
+
+test('the rings animate while Claude works', async ($, on) => {
+  const { clock, blits } = await started($, on)
+  await $.ui.mount(hint(true))
+  await clock.advance(1000)
+  expect(blits.length).toBeGreaterThan(0)
+})

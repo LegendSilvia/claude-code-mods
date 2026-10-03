@@ -19,7 +19,7 @@ const HOT = [255, 70, 70]
 const TRACK = [58, 58, 66]
 const WHITE = [255, 255, 255]
 const DEFAULT_BG = 0x01000000
-const FPS_MS = 50
+const FPS_MS = 80
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
 // which window feeds which limit ring: five_hour, seven_day, then the model's own weekly window
@@ -220,12 +220,13 @@ export const register: Register = on => {
     const badge = effortBadge(await read($, effort))
     const windows = pick(await read($, limits))
     const pcts = [meta?.percent, ...windows.map(l => l?.percentUsed)]
-    const reset = resetAt(windows[0]?.resetsAt, await $.clock.now())
     const now = await $.clock.now()
+    const reset = resetAt(windows[0]?.resetsAt, now)
     const t = $.ui.resolve(e)
     const { Box, Text } = t
     const Raster = e.surface === 'terminal' && 'Raster' in t ? t.Raster : null
-    mounted = Raster ? { requestId: e.requestId, pcts } : null
+    // the light orbits only while Claude works: an idle repaint every frame slows typing in a long session
+    mounted = Raster && e.props.isWorking ? { requestId: e.requestId, pcts } : null
 
     const rings = pcts.map((p, i) => {
       if (Raster) return <Raster key={`ring-${i}`} columns={RING_COLS} rows={RING_ROWS} cells={ringCells(i, p, now)} />
