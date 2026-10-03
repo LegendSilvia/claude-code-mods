@@ -1,3 +1,4 @@
+import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { acBar, acceptance, activeStatus, byOrder, doneStatus, frontLists, frontMatter, parseGitStatus, searchDirs, statusesOf, toTask, when } from './register'
@@ -49,7 +50,7 @@ test('times read as a clock today and a date before', async () => {
 })
 
 test('tasks sort by ordinal, then id number', async () => {
-  const t = (id: string, ordinal?: number) => ({ id, title: id, status: 'To Do', ordinal })
+  const t = (id: string, ordinal?: number) => ({ id, title: id, status: 'To Do', labels: [], assignee: [], ac: { done: 0, total: 0 }, ordinal })
   expect([t('TASK-10'), t('TASK-2'), t('TASK-3', 500)].sort(byOrder).map(x => x.id)).toEqual(['TASK-3', 'TASK-2', 'TASK-10'])
 })
 
@@ -141,4 +142,153 @@ test('the criteria bar fills its share in a rainbow', async () => {
   const c = acBar(4, 4, 8).colors
   expect(c.length).toBe(8)
   expect(c[0]).not.toBe(c[7])
+})
+
+const ok = (stdout = '') => ({ exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
+const RUN = { args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 200 } }
+const PANE = {
+  plugin: 'backlog-pane',
+  surface: 'terminal' as const,
+  component: 'Pane' as const,
+  requestId: 'backlog',
+  props: { title: 'Workspace', isFocused: false, bodyColumns: 40, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} } as never,
+}
+const todo = (id: string) => `---\nid: ${id}\ntitle: Fix the thing\nstatus: To Do\n---\n`
+
+// a Windows project, C:\proj: a git repository with a backlog of one task; `where backlog` finds
+// npm's shims; `run` holds a command before it answers; every command and listing is kept
+function project(
+  on: On,
+  o: { task?: string; isPaneOpen?: () => boolean; run?: (argv: readonly string[]) => Promise<void>; config?: () => { text: string; mtimeMs: number } } = {},
+) {
+  const runs: string[][] = []
+  const lists: string[] = []
+  const config = () => o.config?.() ?? { text: 'statuses: ["To Do", "In Progress", "Done"]', mtimeMs: 1 }
+  on('session.root', () => ({ value: 'C:\\proj' }))
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('ui.panes', () => ({ value: (o.isPaneOpen?.() ?? true) ? [{ id: 'backlog', title: 'Workspace', isShown: true, isFocused: false, isPlaced: true }] : [] }))
+  on('fs.exists', ($, e) => ({ value: e.path === 'C:\\proj\\backlog\\tasks' || e.path.endsWith('\\node_modules\\backlog.md\\cli.js') }))
+  on('fs.list', ($, e) => {
+    lists.push(e.path)
+    return { value: e.path === 'C:\\proj\\backlog\\tasks' ? [{ name: 'task-1.md', kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] : [] }
+  })
+  on('fs.stat', () => ({ value: { kind: 'file' as const, size: 1, mtimeMs: config().mtimeMs, isLink: false } }))
+  on('fs.read', ($, e) => ({ value: e.path.endsWith('task-1.md') ? (o.task ?? todo('TASK-1')) : config().text }))
+  on('process.run', async ($, e) => {
+    runs.push([...e.argv])
+    await o.run?.(e.argv)
+    if (e.argv.includes('rev-parse')) return { value: ok('C:/proj\n') }
+    if (e.argv[0] === 'where') return { value: ok('C:\\npm\\backlog\r\nC:\\npm\\backlog.cmd\r\n') }
+    return { value: ok('## main\n') }
+  })
+  return { runs, lists }
+}
+const gitStatus = (runs: string[][]) => runs.filter(r => r.includes('status'))
+
+test('on Windows the backlog CLI runs through node, never a bare name or a .cmd shim', async ($, on) => {
+  mock.clock(on)
+  const { runs } = project(on)
+  await $.command.run({ command: 'backlog', ...RUN })
+  const ui = await $.ui.mount(PANE)
+  await ui.press({ key: 'start-TASK-1' })
+  const backlog = runs.filter(r => r.includes('task'))
+  expect(backlog).toEqual([['node', 'C:\\npm\\node_modules\\backlog.md\\cli.js', 'task', 'edit', 'TASK-1', '-s', 'In Progress']])
+  expect(runs.some(r => r[0] === 'backlog' || /\.(cmd|bat)$/i.test(r[0] ?? ''))).toBe(false)
+})
+
+test('a task id that is not a plain name is refused without running anything', async ($, on) => {
+  mock.clock(on)
+  const { runs } = project(on, { task: todo('"TASK-1 & calc"') })
+  await $.command.run({ command: 'backlog', ...RUN })
+  const ui = await $.ui.mount(PANE)
+  await ui.press({ key: 'start-TASK-1 & calc' })
+  expect(runs.filter(r => r.includes('task') || r[0] === 'where' || r.includes('--version'))).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /refused/ })).toBeDefined()
+})
+
+test('git status takes no optional locks and leaves non-ASCII names unquoted', async ($, on) => {
+  mock.clock(on)
+  const { runs } = project(on)
+  await $.command.run({ command: 'backlog', ...RUN })
+  expect(gitStatus(runs)[0]).toEqual(['git', '--no-optional-locks', '-c', 'core.quotePath=false', 'status', '--porcelain=v1', '-b'])
+})
+
+test('a poll is skipped while the last git status still runs', async ($, on) => {
+  const clock = mock.clock(on)
+  let statuses = 0
+  // every git status after the first takes 10 s
+  const { runs } = project(on, { run: async argv => void (argv.includes('status') && ++statuses > 1 && (await clock.sleep(10_000))) })
+  await $.command.run({ command: 'backlog', ...RUN })
+  await clock.advance(4000)
+  await clock.advance(4000)
+  await clock.advance(4000)
+  expect(gitStatus(runs).length).toBe(2)
+  // it answered at 14 s; the 16 s poll runs again
+  await clock.advance(4000)
+  expect(gitStatus(runs).length).toBe(3)
+})
+
+test('polls skip git and the backlog while the pane is closed', async ($, on) => {
+  const clock = mock.clock(on)
+  let isPaneOpen = true
+  const { runs, lists } = project(on, { isPaneOpen: () => isPaneOpen })
+  await $.command.run({ command: 'backlog', ...RUN })
+  const seen = { runs: runs.length, lists: lists.length }
+  isPaneOpen = false
+  await clock.advance(12_000)
+  expect({ runs: runs.length, lists: lists.length }).toEqual(seen)
+  isPaneOpen = true
+  await clock.advance(4000)
+  expect(gitStatus(runs).length).toBe(2)
+})
+
+test('the session starts without waiting on the first scan', async ($, on) => {
+  const clock = mock.clock(on)
+  // git and everything else take a minute
+  project(on, { run: () => clock.sleep(60_000) })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', () => ({ value: { command: 'backlog' } }))
+  let isStarted = false
+  void $.session.start({ cwd: 'C:\\proj', surface: 'terminal', isInteractive: true }).then(() => {
+    isStarted = true
+  })
+  await clock.settle()
+  expect(isStarted).toBe(true)
+})
+
+test('/backlog while the first scan still runs starts no second watch', async ($, on) => {
+  const clock = mock.clock(on)
+  // finding the repository takes a second
+  const { runs } = project(on, { run: async argv => void (argv.includes('rev-parse') && (await clock.sleep(1000))) })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', () => ({ value: { command: 'backlog' } }))
+  await $.session.start({ cwd: 'C:\\proj', surface: 'terminal', isInteractive: true })
+  const opened = $.command.run({ command: 'backlog', ...RUN })
+  await clock.advance(1000)
+  await opened
+  expect(runs.filter(r => r.includes('rev-parse')).length).toBe(1)
+})
+
+test('an edit to config.yml alone shows its statuses on the next poll', async ($, on) => {
+  const clock = mock.clock(on)
+  let config = { text: 'statuses: ["To Do", "In Progress", "Done"]', mtimeMs: 1 }
+  project(on, { config: () => config })
+  await $.command.run({ command: 'backlog', ...RUN })
+  const ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: /Review/ })).toBeUndefined()
+  config = { text: 'statuses: ["To Do", "In Progress", "Review", "Done"]', mtimeMs: 2 }
+  await clock.advance(4000)
+  expect(await ui.find({ type: 'Text', text: /Review/ })).toBeDefined()
+})
+
+test('Enter pressed twice while a task is being created creates it once', async ($, on) => {
+  const clock = mock.clock(on)
+  // task create takes a second
+  const { runs } = project(on, { run: async argv => void (argv.includes('create') && (await clock.sleep(1000))) })
+  await $.command.run({ command: 'backlog', ...RUN })
+  const ui = await $.ui.mount(PANE)
+  await ui.input({ key: 'new-task', text: 'Write the docs' })
+  await ui.input({ key: 'new-task', text: 'Write the docs' })
+  await clock.advance(2000)
+  expect(runs.filter(r => r.includes('create')).length).toBe(1)
 })

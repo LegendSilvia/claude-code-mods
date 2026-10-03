@@ -173,7 +173,9 @@ let signature = ''
 async function scan($: EngineInterface, dir: string): Promise<void> {
   const sep = sepOf(dir)
   const files = (await $.fs.list(`${dir}${sep}tasks`).catch(() => [])).filter(f => f.kind === 'file' && f.name.endsWith('.md'))
-  const sig = files.map(f => `${f.name}:${f.mtimeMs}`).sort().join('|')
+  // config.yml counts too: an edited status list shows without waiting on a task file
+  const conf = await $.fs.stat(`${dir}${sep}config.yml`).catch(() => null)
+  const sig = [...files.map(f => `${f.name}:${f.mtimeMs}`).sort(), `config.yml:${conf?.mtimeMs ?? 0}`].join('|')
   if (sig === signature) return
   signature = sig
   const tasks: Task[] = []
@@ -209,9 +211,11 @@ export function parseGitStatus(out: string): Git {
   return { branch, ahead, behind, files }
 }
 
-// the workspace's git state, or null where it is not a repository (or git is missing)
+// the workspace's git state, or null where it is not a repository (or git is missing); a poll
+// never takes index.lock from the person's own git, and non-ASCII names come out as written
 async function scanGit($: EngineInterface, cwd: string): Promise<void> {
-  const r = await $.process.run(['git', 'status', '--porcelain=v1', '-b'], { cwd, timeoutMs: 10000 }).catch(() => null)
+  const argv = ['git', '--no-optional-locks', '-c', 'core.quotePath=false', 'status', '--porcelain=v1', '-b']
+  const r = await $.process.run(argv, { cwd, timeoutMs: 10000 }).catch(() => null)
   const next = r && r.exitCode === 0 ? parseGitStatus(r.stdout) : null
   const prev = await read($, git)
   if (JSON.stringify(prev) !== JSON.stringify(next)) await update($, git, () => next)
@@ -229,29 +233,55 @@ async function tick($: EngineInterface): Promise<void> {
   if (w.top) await scanGit($, w.root)
 }
 
-// starts watching once; true when there is something to show (a backlog, or a git repository)
-async function watch($: EngineInterface): Promise<boolean> {
-  if (!watched) {
-    const root = await $.session.root()
-    const top = await findRepoTop($, root)
-    watched = { root, top, dir: await findBacklog($, root, top) }
-    $.clock.every(POLL_MS, () => void tick($).catch(() => undefined))
+// the timer's tick; skipped while the last one still runs, so a slow git never stacks up, and
+// while the pane is closed, since nobody sees it (/backlog scans again as it reopens)
+let isPolling = false
+async function poll($: EngineInterface): Promise<void> {
+  if (isPolling) return
+  isPolling = true
+  try {
+    if ((await $.ui.panes()).some(p => p.id === PANE)) await tick($)
+  } finally {
+    isPolling = false
   }
-  await tick($)
-  return watched.dir !== null || watched.top !== null
 }
 
+// starts watching once, however many callers race to it (the session's start and an early
+// /backlog); true when there is something to show (a backlog, or a git repository)
+let starting: Promise<void> | null = null
+async function watch($: EngineInterface): Promise<boolean> {
+  if (!watched) {
+    starting ??= (async () => {
+      const root = await $.session.root()
+      const top = await findRepoTop($, root)
+      watched = { root, top, dir: await findBacklog($, root, top) }
+      $.clock.every(POLL_MS, () => void poll($).catch(() => undefined))
+    })().finally(() => (starting = null))
+    await starting
+  }
+  await tick($)
+  return watched !== null && (watched.dir !== null || watched.top !== null)
+}
+
+// a Windows host: the paths the engine hands out start with a drive letter there
+const isWindowsPath = (path: string) => /^[A-Za-z]:[\\/]/.test(path)
+
 // the backlog command as an argument vector: the binary on PATH, or on Windows the npm shim's
-// node script, since a .cmd shim cannot run without a shell and a shell would reparse titles
+// node script, since a .cmd shim cannot run without a shell and a shell would reparse titles;
+// a bare `backlog` on Windows resolves to that shim, so there only a full .exe path runs as is
 let backlogArgv: string[] | null | undefined
 async function backlogCommand($: EngineInterface, cwd: string): Promise<string[] | null> {
   if (backlogArgv !== undefined) return backlogArgv
-  const direct = await $.process.run(['backlog', '--version'], { cwd, timeoutMs: 15000 }).catch(() => null)
-  if (direct && direct.exitCode === 0) return (backlogArgv = ['backlog'])
-  const where = await $.process.run(['where', 'backlog.cmd'], { cwd, timeoutMs: 10000 }).catch(() => null)
-  const shim = where && where.exitCode === 0 ? where.stdout.split(/\r?\n/)[0]!.trim() : ''
-  if (shim) {
-    const script = `${parentOf(shim)}\\node_modules\\backlog.md\\cli.js`
+  if (!isWindowsPath(cwd)) {
+    const direct = await $.process.run(['backlog', '--version'], { cwd, timeoutMs: 15000 }).catch(() => null)
+    return (backlogArgv = direct && direct.exitCode === 0 ? ['backlog'] : null)
+  }
+  const where = await $.process.run(['where', 'backlog'], { cwd, timeoutMs: 10000 }).catch(() => null)
+  // the first hit Windows can start; npm's extensionless sh shim sits beside the .cmd and is skipped
+  const hit = where && where.exitCode === 0 ? where.stdout.split(/\r?\n/).map(l => l.trim()).find(l => /\.(exe|cmd|bat)$/i.test(l)) : undefined
+  if (hit && /\.exe$/i.test(hit)) return (backlogArgv = [hit])
+  if (hit) {
+    const script = `${parentOf(hit)}\\node_modules\\backlog.md\\cli.js`
     if (await $.fs.exists(script).catch(() => false)) return (backlogArgv = ['node', script])
   }
   return (backlogArgv = null)
@@ -281,14 +311,26 @@ async function runBacklog($: EngineInterface, args: string[], ok: string): Promi
 async function setStatus($: EngineInterface, id: string, to: 'start' | 'done'): Promise<void> {
   const b = await read($, board)
   if (!b) return
+  // ids come from the repo's files; one that is not a plain name never reaches a command line
+  if (!/^[\w.-]+$/.test(id)) {
+    await update($, flash, () => `failed: refused odd task id ${JSON.stringify(id)}`)
+    return
+  }
   const status = to === 'start' ? activeStatus(b.statuses) : doneStatus(b.statuses)
   await runBacklog($, ['task', 'edit', id, '-s', status], `${id} ${to === 'start' ? 'started' : 'done'}`)
 }
 
+// the titles being created now: Enter pressed again before the CLI answers makes no second task
+const creating = new Set<string>()
 async function createTask($: EngineInterface, title: string): Promise<void> {
   const t = title.trim()
-  if (!t) return
-  await runBacklog($, ['task', 'create', t], `created “${t}”`)
+  if (!t || creating.has(t)) return
+  creating.add(t)
+  try {
+    await runBacklog($, ['task', 'create', t], `created “${t}”`)
+  } finally {
+    creating.delete(t)
+  }
 }
 
 const GIT_CODE_COLOR: Record<string, string> = { M: '#ffcb6b', A: '#69f0ae', D: '#ff6b8b', R: '#b388ff', C: '#b388ff', U: '#ff6b8b', '?': '#69f0ae' }
@@ -322,7 +364,10 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
     await $.command.register({ name: 'backlog', description: "Show the project's git status and Backlog.md tasks in a side pane" })
-    if (await watch($)) void $.ui.open({ id: PANE, title: 'Workspace' })
+    // the first scan runs on its own, so the first prompt never waits on git
+    void watch($)
+      .then(found => (found ? $.ui.open({ id: PANE, title: 'Workspace' }) : undefined))
+      .catch(() => undefined)
     return ran
   })
 

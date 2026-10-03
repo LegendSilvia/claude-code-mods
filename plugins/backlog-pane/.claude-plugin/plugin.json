@@ -1,6 +1,6 @@
 {
   "name": "backlog-pane",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A side pane with the project's git status and its Backlog.md tasks: start, finish and create tasks from the pane",
   "author": {
     "name": "LegendSilvia",
