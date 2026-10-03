@@ -102,19 +102,37 @@ export function fmtClock(ms: number): string {
   return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
 }
 
-export const BAR = 10
 const FRAME_MS = 80
-const LIT = 4
-const DIM_RGB = 0x4a4458
+const STEP_MS = 100
 const DEFAULT_BG = 0x01000000
 
-// which cells are lit at time t: a run of LIT cells entering at the left and leaving at the right
-const lit = (t: number) => {
-  const head = Math.floor(t / FRAME_MS) % (BAR + LIT)
-  return (i: number) => head - i >= 0 && head - i < LIT
+// a rounded 4×2 square; the ring runs clockwise: top left→right, then bottom right→left
+export const RING_W = 4
+export const RING_H = 2
+const RING_GLYPHS = '╭──╮╰──╯'
+const RING: ReadonlyArray<readonly [number, number]> = [[0, 0], [1, 0], [2, 0], [3, 0], [3, 1], [2, 1], [1, 1], [0, 1]]
+// brightness by distance behind the head; the rest of the ring stays dim
+const TRAIL = [1, 0.7, 0.45, 0.25]
+const DIM = 0.12
+
+export const ringHead = (t: number) => Math.floor(t / STEP_MS) % RING.length
+
+export const ringLevels = (t: number) => {
+  const head = ringHead(t)
+  return RING.map((_, p) => TRAIL[(head - p + RING.length) % RING.length] ?? DIM)
 }
 
-export const barGlyphs = (t: number) => Array.from({ length: BAR }, (_, i) => (lit(t)(i) ? '▰' : '▱')).join('')
+// row-major cells: each ring cell takes the rainbow at its place, the spectrum turning slowly, scaled by its level
+export function ringFrame(t: number): { cp: number; fg: number }[] {
+  const levels = ringLevels(t)
+  const glyphs = [...RING_GLYPHS].map(ch => ch.codePointAt(0)!)
+  const cells = glyphs.map(cp => ({ cp, fg: 0 }))
+  RING.forEach(([x, y], p) => {
+    const [r, g, b] = rgb(rainbow(((p / RING.length) * 360 + t / 8) % 360)).map(v => Math.round(v * levels[p]!))
+    cells[y * RING_W + x]!.fg = (r! << 16) | (g! << 8) | b!
+  })
+  return cells
+}
 
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 // the cells are a multiple of 12 bytes, so there is never padding (as plan-progress-fx)
@@ -127,15 +145,15 @@ function base64(bytes: Uint8Array): string {
   return out
 }
 
-// one frame of the bar as a Raster's cells: lit cells take the rainbow at their place
-export function barCells(t: number): string {
-  const on = lit(t)
-  const words = new Uint32Array(BAR * 3)
-  for (let i = 0; i < BAR; i++) {
-    words[i * 3] = on(i) ? 0x25b0 : 0x25b1
-    words[i * 3 + 1] = on(i) ? parseInt(rainbow((i / (BAR - 1)) * 300).slice(1), 16) : DIM_RGB
+// one frame of the ring as a Raster's cells
+export function ringCells(t: number): string {
+  const frame = ringFrame(t)
+  const words = new Uint32Array(frame.length * 3)
+  frame.forEach((c, i) => {
+    words[i * 3] = c.cp
+    words[i * 3 + 1] = c.fg
     words[i * 3 + 2] = DEFAULT_BG
-  }
+  })
   return base64(new Uint8Array(words.buffer))
 }
 
@@ -203,11 +221,11 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     $.clock.every(FRAME_MS, async () => {
       if (spinners.size === 0) return
-      const cells = barCells(await $.clock.now())
+      const cells = ringCells(await $.clock.now())
       // a spinner that is gone answers { deny } and leaves the set; its next drawing adds it back
       for (const requestId of spinners)
         void $.ui
-          .blit({ requestId, key: 'bar', cells })
+          .blit({ requestId, key: 'ring', cells })
           .then(r => {
             if (r.deny !== undefined) spinners.delete(requestId)
           })
@@ -352,8 +370,9 @@ export const register: Register = on => {
       const { Box, Raster } = $.ui.resolve(e)
       spinners.add(e.requestId)
       return (
-        <Box flexDirection="row" gap={1}>
-          <Raster key="bar" columns={BAR} rows={1} cells={barCells(await $.clock.now())} />
+        // pinned to the bottom of the block, beside the spinner line and its tip; the block grows no taller
+        <Box key="spinner" flexDirection="row" gap={1} alignItems="flex-end">
+          <Raster key="ring" columns={RING_W} rows={RING_H} cells={ringCells(await $.clock.now())} />
           {drawn}
         </Box>
       )

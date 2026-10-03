@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { BAR, DEFAULTS, GOLD_HI, GOLD_LO, fmtClock, fmtDuration, goldEdge, groupLine, iconFor, parseFx, relPath, summarize, toolLabel, truncate, barCells, barGlyphs } from './register'
+import { DEFAULTS, GOLD_HI, GOLD_LO, fmtClock, fmtDuration, goldEdge, groupLine, iconFor, parseFx, relPath, ringCells, ringFrame, ringHead, ringLevels, summarize, toolLabel, truncate } from './register'
 
 const RUN = { args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 200 } }
 
@@ -253,20 +253,44 @@ test('a footer with no turn just ended shows its duration and no time, never a w
   expect(await ui.find({ type: 'Text', text: /^in 3s$/ })).toBeDefined()
 })
 
-test('the spinner bar sweeps four lit cells across ten', async () => {
-  expect(barGlyphs(0)).toBe('▰▱▱▱▱▱▱▱▱▱')
-  expect(barGlyphs(3 * 80)).toBe('▰▰▰▰▱▱▱▱▱▱')
-  expect(barGlyphs(9 * 80)).toBe('▱▱▱▱▱▱▰▰▰▰')
-  expect([...barGlyphs(12345)].length).toBe(BAR)
-  // 10 cells × 3 u32 × 4 bytes = 120 bytes = 160 base64 characters
-  expect(barCells(0).length).toBe(160)
+test('the ring is a rounded 4×2 square whose glyphs never change', async () => {
+  for (const t of [0, 250, 777]) expect(ringFrame(t).map(c => String.fromCodePoint(c.cp)).join('')).toBe('╭──╮╰──╯')
 })
 
-test('the spinner keeps the engine line beside the bar', async ($, on) => {
+test('the head steps clockwise around the eight border cells and wraps', async () => {
+  // ring order: top left→right, then bottom right→left
+  expect([0, 1, 2, 3, 4, 5, 6, 7, 8].map(i => ringHead(i * 100))).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 0])
+})
+
+test('the trail fades behind the head and the rest stays dim', async () => {
+  expect(ringLevels(300)).toEqual([0.25, 0.45, 0.7, 1, 0.12, 0.12, 0.12, 0.12])
+  // the trail wraps from the first cell back to the last ones
+  expect(ringLevels(100)).toEqual([0.7, 1, 0.12, 0.12, 0.12, 0.12, 0.25, 0.45])
+})
+
+test('the brightest cell follows the head across both rows', async () => {
+  const brightest = (t: number) => {
+    const f = ringFrame(t)
+    const sum = (rgb: number) => ((rgb >> 16) & 255) + ((rgb >> 8) & 255) + (rgb & 255)
+    return f.reduce((best, c, i) => (sum(c.fg) > sum(f[best]!.fg) ? i : best), 0)
+  }
+  // ring position 0 is row-major cell 0; position 4 is the bottom-right cell, row-major 7
+  expect(brightest(0)).toBe(0)
+  expect(brightest(400)).toBe(7)
+  expect(brightest(700)).toBe(4)
+})
+
+test('a ring frame is 8 cells of Raster data', async () => {
+  // 8 cells × 3 u32 × 4 bytes = 96 bytes = 128 base64 characters
+  expect(ringCells(0).length).toBe(128)
+})
+
+test('the spinner draws the ring at the bottom of its block, beside the engine line', async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   engineDraws(on, 'Spinner')
   const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'Spinner', props: { word: 'Baking', message: null, suffix: '…', mode: 'responding' } })
-  expect(await ui.find({ type: 'Raster', key: 'bar' })).toMatchObject({ props: { columns: 10, rows: 1 } })
+  expect(await ui.find({ type: 'Raster', key: 'ring' })).toMatchObject({ props: { columns: 4, rows: 2 } })
+  expect(await ui.find({ type: 'Box', key: 'spinner' })).toMatchObject({ props: { alignItems: 'flex-end' } })
   expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
 })
 
