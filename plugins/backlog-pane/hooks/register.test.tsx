@@ -292,3 +292,15 @@ test('Enter pressed twice while a task is being created creates it once', async 
   await clock.advance(2000)
   expect(runs.filter(r => r.includes('create')).length).toBe(1)
 })
+
+test('each section sits in a rounded card in its colour, its title set into the top edge', async ($, on) => {
+  mock.clock(on)
+  project(on)
+  await $.command.run({ command: 'backlog', ...RUN })
+  const ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Box', key: 'card-git' })).toMatchObject({ props: { borderStyle: 'round', borderColor: '#69f0ae', paddingX: 1 } })
+  expect(await ui.find({ type: 'Box', key: 'card-To Do' })).toMatchObject({ props: { borderStyle: 'round', borderColor: '#b388ff' } })
+  expect(await ui.find({ type: 'Box', key: 'title-To Do' })).toMatchObject({ props: { position: 'absolute', top: -1, left: 0 } })
+  expect(await ui.find({ type: 'Box', key: 'count-To Do' })).toMatchObject({ props: { position: 'absolute', top: -1, right: 0 } })
+  expect(await ui.find({ type: 'Box', key: 'card-new' })).toMatchObject({ props: { borderStyle: 'round' } })
+})

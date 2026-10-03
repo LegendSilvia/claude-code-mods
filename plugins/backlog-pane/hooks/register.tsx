@@ -387,20 +387,43 @@ export const register: Register = on => {
     const note = await read($, flash)
     const now = await $.clock.now()
     const cols = Math.max(20, e.props.bodyColumns ?? 40)
-    const rule = <Text color="#3a3a42">{'─'.repeat(cols - 1)}</Text>
+    // a rounded card in one colour; the title and the count lie over its top edge, past the corners
+    const card = (id: string, color: string, title: unknown, count: unknown, body: unknown) => (
+      <Box key={`card-${id}`} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1} marginBottom={1}>
+        {title ? (
+          <Box key={`title-${id}`} position="absolute" top={-1} left={0}>
+            <Text>
+              <Text color={color}>─ </Text>
+              {title}
+              <Text> </Text>
+            </Text>
+          </Box>
+        ) : null}
+        {count ? (
+          <Box key={`count-${id}`} position="absolute" top={-1} right={0}>
+            <Text>
+              <Text> </Text>
+              {count}
+              <Text color={color}> ─</Text>
+            </Text>
+          </Box>
+        ) : null}
+        {body}
+      </Box>
+    )
 
     const gitRows = g ? Math.min(g.files.length, GIT_ROWS) + (g.files.length > GIT_ROWS ? 1 : 0) : 0
-    const gitSection = g ? (
-      <Box key="git" flexDirection="column" marginBottom={1}>
-        <Box flexDirection="row" justifyContent="space-between">
+    const gitSection = g
+      ? card(
+          'git',
+          '#69f0ae',
           <Text bold color="#69f0ae">
             ⎇ {g.branch}
-          </Text>
+          </Text>,
           <Text dimColor>
             ↑{g.ahead} ↓{g.behind}
-          </Text>
-        </Box>
-        {rule}
+          </Text>,
+          <>
         {g.files.length === 0 ? <Text dimColor>✓ clean</Text> : null}
         {g.files.slice(0, GIT_ROWS).map((f, i) => (
           <Text key={`gf-${i}`} wrap="truncate-start">
@@ -411,8 +434,9 @@ export const register: Register = on => {
           </Text>
         ))}
         {g.files.length > GIT_ROWS ? <Text dimColor>+{g.files.length - GIT_ROWS} more</Text> : null}
-      </Box>
-    ) : null
+          </>,
+        )
+      : null
 
     if (!b) {
       return (
@@ -448,19 +472,18 @@ export const register: Register = on => {
       const fits = Math.max(1, Math.floor((room - 3) / perTask))
       const shown = list.slice(0, fits)
       room -= 3 + shown.length * perTask
-      return (
-        <Box key={`sec-${status}`} flexDirection="column" marginBottom={1}>
-          <Box flexDirection="row" justifyContent="space-between">
-            <Text bold color={style.color}>
-              {style.glyph} {label}
-            </Text>
-            <Text dimColor>{String(list.length)}</Text>
-          </Box>
-          {rule}
+      return card(
+        status,
+        style.color,
+        <Text bold color={style.color}>
+          {style.glyph} {label}
+        </Text>,
+        <Text dimColor>{String(list.length)}</Text>,
+        <>
           {list.length === 0 ? <Text dimColor>nothing here</Text> : null}
           {shown.map(t => {
             if (kind === 'active') {
-              const bar = acBar(t.ac.done, t.ac.total, cols - 4)
+              const bar = acBar(t.ac.done, t.ac.total, cols - 6)
               return (
                 <Box key={t.id} flexDirection="column" marginBottom={1}>
                   <Box flexDirection="row" justifyContent="space-between" gap={1}>
@@ -483,7 +506,7 @@ export const register: Register = on => {
                           ━
                         </Text>
                       ))}
-                      <Text color="#3a3a42">{'─'.repeat(Math.max(0, cols - 4 - bar.filled))}</Text>
+                      <Text color="#3a3a42">{'─'.repeat(Math.max(0, cols - 6 - bar.filled))}</Text>
                     </Text>
                   ) : null}
                   <Text dimColor>
@@ -516,7 +539,7 @@ export const register: Register = on => {
             )
           })}
           {list.length > shown.length ? <Text dimColor>+{list.length - shown.length} more</Text> : null}
-        </Box>
+        </>,
       )
     })
 
@@ -524,9 +547,15 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {gitSection}
         {sections}
-        {Input ? (
-          <Input key="new-task" placeholder="new task title…" submitLabel="add" onSubmit={(value: string) => void createTask($, value)} />
-        ) : null}
+        {Input
+          ? card(
+              'new',
+              '#4dd0e1',
+              null,
+              null,
+              <Input key="new-task" placeholder="new task title…" submitLabel="add" onSubmit={(value: string) => void createTask($, value)} />,
+            )
+          : null}
         <Text dimColor>
           <Text color="#69f0ae">✓ {done} done</Text> · backlog.md synced {clock(b.readAt)}
         </Text>
