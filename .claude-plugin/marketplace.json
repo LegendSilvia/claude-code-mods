@@ -27,6 +27,11 @@
       "name": "backlog-pane",
       "source": "./plugins/backlog-pane",
       "description": "A side pane with the project's git status and its Backlog.md tasks: start, finish and create tasks from the pane"
+    },
+    {
+      "name": "transcript-fx",
+      "source": "./plugins/transcript-fx",
+      "description": "Gold tool blocks, teal prompt panels, an animated spinner bar and a rainbow turn footer in the transcript"
     }
   ]
 }
