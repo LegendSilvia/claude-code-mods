@@ -1,6 +1,6 @@
 {
   "name": "transcript-fx",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Gold tool blocks, teal prompt panels, an animated spinner bar and a rainbow turn footer in the transcript",
   "author": { "name": "LegendSilvia", "url": "https://github.com/LegendSilvia" },
   "license": "MIT",

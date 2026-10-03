@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { DEFAULTS, GOLD_HI, GOLD_LO, fmtClock, fmtDuration, goldEdge, groupLine, iconFor, parseFx, relPath, ringCells, ringFrame, ringHead, ringLevels, summarize, toolLabel, truncate } from './register'
+import { DEFAULTS, GOLD_HI, GOLD_LO, fmtClock, fmtDuration, goldEdge, groupLine, iconFor, parseFx, rainbow, relPath, ringCells, ringFrame, ringHead, ringLevels, summarize, toolLabel, truncate } from './register'
 
 const RUN = { args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 200 } }
 
@@ -197,13 +197,30 @@ test('a header still draws, with the path as given, when the cwd cannot be read'
 
 const MSG = (kind: string) => ({ text: '/pokemon size large', origin: { kind }, isExpanded: true }) as any
 
-test('a typed prompt draws in a teal panel with a you tag and a right rainbow edge', async ($, on) => {
+test('a typed prompt sits in a padded teal panel with a you tag', async ($, on) => {
   engineDraws(on, 'UserMessage')
   const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'UserMessage', props: MSG('composer') })
   expect(await ui.find({ type: 'Text', text: '/pokemon size large' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'you' })).toBeDefined()
-  expect(await ui.find({ type: 'Box', key: 'panel' })).toMatchObject({ props: { backgroundColor: '#12222a' } })
-  expect(await ui.find({ type: 'Box', key: 'edge-0' })).toBeDefined()
+  expect(await ui.find({ type: 'Box', key: 'panel' })).toMatchObject({ props: { backgroundColor: '#12222a', paddingX: 1, paddingY: 1 } })
+})
+
+test('the prompt box is spaced from the rows around it', async ($, on) => {
+  engineDraws(on, 'UserMessage')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'UserMessage', props: MSG('composer'), viewport: { columns: 60, rows: 30 } })
+  expect(await ui.find({ type: 'Box', key: 'prompt-box' })).toMatchObject({ props: { marginTop: 1, marginBottom: 1 } })
+})
+
+test('a rainbow frame runs clockwise around the box, corners included', async ($, on) => {
+  engineDraws(on, 'UserMessage')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'UserMessage', props: MSG('composer'), viewport: { columns: 60, rows: 30 } })
+  for (const key of ['box-top', 'box-bottom', 'box-left', 'box-right']) expect(await ui.find({ type: 'Box', key })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '╭' })).toMatchObject({ props: { color: rainbow(0) } })
+  expect(await ui.find({ type: 'Text', text: '╮' })).toMatchObject({ props: { color: rainbow(90) } })
+  expect(await ui.find({ type: 'Text', text: '╯' })).toMatchObject({ props: { color: rainbow(150) } })
+  expect(await ui.find({ type: 'Text', text: '╰' })).toMatchObject({ props: { color: rainbow(240) } })
+  // the top line's dashes clip at the column's real width rather than wrap
+  expect(await ui.find({ type: 'Text', text: /^─+$/ })).toMatchObject({ props: { wrap: 'truncate-end' } })
 })
 
 test('notifications and other senders keep the engine drawing', async ($, on) => {
@@ -341,13 +358,27 @@ test('a spinner that is gone stops the frame timer', async ($, on) => {
 })
 
 test('an older footer never takes a later turn’s time', async ($, on) => {
-  mock.clock(on, { now: AT_342 })
+  const clock = mock.clock(on, { now: AT_342 })
   answersTurns(on)
   engineDraws(on, 'TurnDuration')
+  // a resumed footer is on screen well before the next turn ends
   const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Baked', durationMs: 3_000 }, requestId: 'turn-resumed' })
+  await clock.advance(60_000)
   await endTurn($, 3_000)
   await ui.redraw()
   expect(await ui.find({ type: 'Text', text: /^in 3s$/ })).toBeDefined()
+})
+
+test('a footer drawn just before its turn-complete event still takes that turn’s time', async ($, on) => {
+  const clock = mock.clock(on, { now: AT_342 })
+  answersTurns(on)
+  engineDraws(on, 'TurnDuration')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Crunched', durationMs: 10_000 }, requestId: 'turn-early' })
+  expect(await ui.find({ type: 'Text', text: /^in 10s$/ })).toBeDefined()
+  await clock.advance(50)
+  await endTurn($, 10_050)
+  await ui.redraw()
+  expect(await ui.find({ type: 'Text', text: 'in 10s · 3:42 PM' })).toBeDefined()
 })
 
 test('a footer takes a turn’s time only when the durations match', async ($, on) => {

@@ -182,6 +182,23 @@ export const edgeSegments = (text: string, columns: number) => {
   return Math.min(48, Math.max(6, rows))
 }
 
+// the prompt box's colours, one spectrum clockwise from the top-left corner:
+// top 0→90, right side 90→150, bottom (right to left) 150→240, left side (bottom to top) 240→300
+export function boxFrame(columns: number, sideSegments: number) {
+  const span = (from: number, to: number, n: number, inner: boolean) =>
+    Array.from({ length: n }, (_, i) => rainbow(from + (to - from) * (inner ? (i + 1) / (n + 1) : i / Math.max(1, n - 1))))
+  const dashes = Math.max(1, columns - 2)
+  return {
+    corners: { topLeft: rainbow(0), topRight: rainbow(90), bottomRight: rainbow(150), bottomLeft: rainbow(240) },
+    top: span(0, 90, dashes, true),
+    right: span(90, 150, sideSegments, true),
+    // drawn left to right, so it runs from the bottom-left's hue back to the bottom-right's
+    bottom: span(240, 150, dashes, true),
+    // drawn top to bottom, so it runs from the top-left's end of the spectrum down
+    left: span(300, 240, sideSegments, true),
+  }
+}
+
 // a 1-column edge laid over the row's first (or last) column, so it never adds height
 function edge(Box: any, colors: string[], side: 'left' | 'right') {
   return (
@@ -205,6 +222,8 @@ const status = (p: { isRunning: boolean; isErrored: boolean; isInterrupted: bool
 export const register: Register = on => {
   // each footer's end time, null for one that is not the last turn's; a reload starts it over
   const footerAt = new Map<string, number | null>()
+  // when each footer was first drawn
+  const footerSeen = new Map<string, number>()
   // spinners on screen, repainted in place each frame without a render pass
   const spinners = new Set<string>()
   // tool calls drawn as rows of an expanded group, which show their results inline
@@ -342,19 +361,48 @@ export const register: Register = on => {
     if (e.surface !== 'terminal' || !mine || !(await isOn($, 'prompts'))) return next(e)
     try {
       const { Box, Text } = $.ui.resolve(e)
-      const n = edgeSegments(e.props.text, e.viewport?.columns ?? 100)
-      // violet at the top to red at the bottom, mirroring the replies' edge
-      const colors = Array.from({ length: n }, (_, i) => rainbow(300 - (i / Math.max(1, n - 1)) * 300))
-      return (
-        <Box flexDirection="row">
-          <Box key="panel" flexGrow={1} flexDirection="row" backgroundColor={TEAL_TINT} paddingX={1} gap={1}>
-            <Box flexGrow={1}>
-              <Text>{e.props.text}</Text>
-            </Box>
-            <Text dimColor>you</Text>
+      const columns = e.viewport?.columns ?? 100
+      const f = boxFrame(columns, edgeSegments(e.props.text, columns) * 2)
+      // a row of the frame: two corners and the dashes between, which clip at the column's real width
+      const line = (key: string, corners: [string, string], cornerColors: [string, string], dashes: string[]) => (
+        <Box key={key} flexDirection="row" height={1}>
+          <Text color={cornerColors[0]}>{corners[0]}</Text>
+          <Box flexGrow={1} flexShrink={1} overflow="hidden">
+            <Text wrap="truncate-end">
+              {dashes.map((c, i) => (
+                <Text key={`d-${i}`} color={c}>
+                  ─
+                </Text>
+              ))}
+            </Text>
           </Box>
-          <Box width={1} flexShrink={0} />
-          {edge(Box, colors, 'right')}
+          <Text color={cornerColors[1]}>{corners[1]}</Text>
+        </Box>
+      )
+      // a side: more segments than rows, so the layout gives every row one, each drawing its own │
+      const side = (key: string, colors: string[]) => (
+        <Box key={key} width={1} flexShrink={0} flexDirection="column" overflow="hidden">
+          {colors.map((c, i) => (
+            <Box key={`s-${i}`} flexGrow={1} overflow="hidden">
+              <Text color={c}>│</Text>
+            </Box>
+          ))}
+        </Box>
+      )
+      return (
+        <Box key="prompt-box" flexDirection="column" marginTop={1} marginBottom={1}>
+          {line('box-top', ['╭', '╮'], [f.corners.topLeft, f.corners.topRight], f.top)}
+          <Box flexDirection="row">
+            {side('box-left', f.left)}
+            <Box key="panel" flexGrow={1} flexDirection="row" backgroundColor={TEAL_TINT} paddingX={1} paddingY={1} gap={1}>
+              <Box flexGrow={1}>
+                <Text>{e.props.text}</Text>
+              </Box>
+              <Text dimColor>you</Text>
+            </Box>
+            {side('box-right', f.right)}
+          </Box>
+          {line('box-bottom', ['╰', '╯'], [f.corners.bottomLeft, f.corners.bottomRight], f.bottom)}
         </Box>
       )
     } catch {
@@ -408,12 +456,17 @@ export const register: Register = on => {
     if (e.surface !== 'terminal' || !(await isOn($, 'footer'))) return next(e)
     try {
       const { Box, Text } = $.ui.resolve(e)
-      // the first drawing decides once: the last turn's end time, or none, so a later turn never restamps it
+      // the footer can be drawn before its turn.complete arrives: it waits for a turn that ended near when it
+      // first appeared, with its duration; once that window has passed it settles on no time, so a later turn
+      // never stamps an older footer
+      const now = await $.clock.now()
+      if (!footerSeen.has(e.requestId)) footerSeen.set(e.requestId, now)
       if (!footerAt.has(e.requestId)) {
+        const seen = footerSeen.get(e.requestId)!
         const end = await read($, lastEnd)
-        const isThisTurn =
-          end !== null && (await $.clock.now()) - end.at < FRESH_MS && Math.abs(end.durationMs - e.props.durationMs) < SAME_TURN_MS
-        footerAt.set(e.requestId, isThisTurn ? end.at : null)
+        const isThisTurn = end !== null && Math.abs(end.at - seen) < FRESH_MS && Math.abs(end.durationMs - e.props.durationMs) < SAME_TURN_MS
+        if (isThisTurn) footerAt.set(e.requestId, end.at)
+        else if (now - seen >= FRESH_MS) footerAt.set(e.requestId, null)
       }
       const at = footerAt.get(e.requestId) ?? null
       const word = e.props.word.toLowerCase()
