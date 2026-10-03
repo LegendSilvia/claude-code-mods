@@ -362,7 +362,9 @@ export const register: Register = on => {
     try {
       const { Box, Text } = $.ui.resolve(e)
       const columns = e.viewport?.columns ?? 100
-      const f = boxFrame(columns, edgeSegments(e.props.text, columns) * 2)
+      // the middle row's height: the text's rows at the panel's width, plus a padding row above and below
+      const textRows = e.props.text.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil([...l].length / Math.max(10, columns - 10))), 0)
+      const f = boxFrame(columns, textRows + 2)
       // a row of the frame: two corners and the dashes between, which clip at the column's real width
       const line = (key: string, corners: [string, string], cornerColors: [string, string], dashes: string[]) => (
         <Box key={key} flexDirection="row" height={1}>
@@ -379,9 +381,10 @@ export const register: Register = on => {
           <Text color={cornerColors[1]}>{corners[1]}</Text>
         </Box>
       )
-      // a side: more segments than rows, so the layout gives every row one, each drawing its own │
-      const side = (key: string, colors: string[]) => (
-        <Box key={key} width={1} flexShrink={0} flexDirection="column" overflow="hidden">
+      // a side lies over the middle row's first or last column, so the text and padding alone set the height;
+      // one segment per row, each drawing its own │
+      const side = (key: string, colors: string[], at: 'left' | 'right') => (
+        <Box key={key} position="absolute" top={0} bottom={0} {...(at === 'left' ? { left: 0 } : { right: 0 })} width={1} flexDirection="column" overflow="hidden">
           {colors.map((c, i) => (
             <Box key={`s-${i}`} flexGrow={1} overflow="hidden">
               <Text color={c}>│</Text>
@@ -393,14 +396,16 @@ export const register: Register = on => {
         <Box key="prompt-box" flexDirection="column" marginTop={1} marginBottom={1}>
           {line('box-top', ['╭', '╮'], [f.corners.topLeft, f.corners.topRight], f.top)}
           <Box flexDirection="row">
-            {side('box-left', f.left)}
+            <Box width={1} flexShrink={0} />
             <Box key="panel" flexGrow={1} flexDirection="row" backgroundColor={TEAL_TINT} paddingX={1} paddingY={1} gap={1}>
               <Box flexGrow={1}>
                 <Text>{e.props.text}</Text>
               </Box>
               <Text dimColor>you</Text>
             </Box>
-            {side('box-right', f.right)}
+            <Box width={1} flexShrink={0} />
+            {side('box-left', f.left, 'left')}
+            {side('box-right', f.right, 'right')}
           </Box>
           {line('box-bottom', ['╰', '╯'], [f.corners.bottomLeft, f.corners.bottomRight], f.bottom)}
         </Box>

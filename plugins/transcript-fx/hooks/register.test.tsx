@@ -413,3 +413,11 @@ test('the rule spans the band body, not the whole window', async ($, on) => {
   const rule = (await ui.find({ type: 'Box', key: 'rule' })) as { children?: unknown[] } | undefined
   expect(rule?.children?.length).toBe(70)
 })
+
+test('the box sides never set its height: they lie over the rows the text and padding make', async ($, on) => {
+  engineDraws(on, 'UserMessage')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'UserMessage', props: MSG('composer'), viewport: { columns: 60, rows: 30 } })
+  for (const key of ['box-left', 'box-right']) {
+    expect(await ui.find({ type: 'Box', key })).toMatchObject({ props: { position: 'absolute', top: 0, bottom: 0 } })
+  }
+})
