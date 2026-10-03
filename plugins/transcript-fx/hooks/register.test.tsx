@@ -2,6 +2,19 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULTS, GOLD_HI, GOLD_LO, fmtClock, fmtDuration, goldEdge, groupLine, iconFor, parseFx, relPath, summarize, toolLabel, truncate } from './register'
 
+const RUN = { args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 200 } }
+
+// nothing stands beneath a test's plugins: the store is the test's to answer
+const fakeStore = (on: any) => {
+  const data = new Map<string, unknown>()
+  on('store.get', ($: any, e: { key: string }) => ({ value: data.get(e.key) }))
+  on('store.set', ($: any, e: { key: string; value: unknown }) => {
+    data.set(e.key, e.value)
+    return { value: undefined }
+  })
+  return data
+}
+
 test('icons by tool kind', async () => {
   expect(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].map(iconFor)).toEqual(['✎', '✎', '✎', '✎'])
   expect(['Read', 'Glob', 'Grep'].map(iconFor)).toEqual(['⌕', '⌕', '⌕'])
@@ -81,4 +94,24 @@ test('/fx arguments', async () => {
   expect(parseFx('nope on')).toEqual({ kind: 'error' })
   expect(parseFx('tools')).toEqual({ kind: 'error' })
   expect(DEFAULTS).toEqual({ tools: true, spinner: true, prompts: true, footer: true, rule: true })
+})
+
+test('/fx lists the parts, all on by default', async $ => {
+  const r = await $.command.run({ command: 'fx', ...RUN })
+  expect(r.text).toContain('tools: on')
+  expect(r.text).toContain('rule: on')
+})
+
+test('/fx <part> off turns one part off and is remembered in the store', async ($, on) => {
+  const store = fakeStore(on)
+  expect((await $.command.run({ command: 'fx', ...RUN, args: 'Spinner OFF' })).text).toBe('transcript-fx: spinner off.')
+  expect((await $.command.run({ command: 'fx', ...RUN })).text).toContain('spinner: off')
+  expect(store.get('settings')).toMatchObject({ spinner: false, tools: true })
+})
+
+test('/fx with bad arguments answers the usage and changes nothing', async $ => {
+  for (const args of ['tools maybe', 'nope on', 'tools']) {
+    expect((await $.command.run({ command: 'fx', ...RUN, args })).text).toBe('Usage: /fx [tools|spinner|prompts|footer|rule] [on|off]')
+  }
+  expect((await $.command.run({ command: 'fx', ...RUN })).text).not.toContain(': off')
 })

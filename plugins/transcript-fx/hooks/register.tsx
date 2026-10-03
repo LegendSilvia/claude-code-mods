@@ -1,4 +1,5 @@
-import type { Register } from 'claude-code'
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
 import type { Part, Settings } from '../types'
 
@@ -109,4 +110,30 @@ export function parseFx(args: string): { kind: 'show' } | { kind: 'set'; part: P
   return { kind: 'set', part: part as Part, on: value === 'on' }
 }
 
-export const register: Register = () => {}
+const settings = atom({ plugin: 'transcript-fx', key: 'settings' } as const, DEFAULTS)
+const endedAt = atom({ plugin: 'transcript-fx', key: 'endedAt' } as const, {} as Record<string, number>)
+const USAGE = `Usage: /fx [${PARTS.join('|')}] [on|off]`
+
+const isOn = async ($: EngineInterface, part: Part) => (await read($, settings))[part]
+
+export const register: Register = on => {
+  on('session.start', async ($, e, next) => {
+    const saved = await $.store.get('settings')
+    if (saved && typeof saved === 'object') await update($, settings, () => ({ ...DEFAULTS, ...(saved as Partial<Settings>) }))
+    await $.command.register({ name: 'fx', description: 'Show or toggle transcript-fx parts' })
+    return next(e)
+  })
+
+  on('command.run', { command: 'fx' }, async ($, e) => {
+    const cmd = parseFx(e.args)
+    if (cmd.kind === 'error') return { text: USAGE }
+    if (cmd.kind === 'set') {
+      const now = { ...(await read($, settings)), [cmd.part]: cmd.on }
+      await update($, settings, () => now)
+      await $.store.set('settings', now)
+      return { text: `transcript-fx: ${cmd.part} ${cmd.on ? 'on' : 'off'}.` }
+    }
+    const s = await read($, settings)
+    return { text: PARTS.map(p => `${p}: ${s[p] ? 'on' : 'off'}`).join(' · ') }
+  })
+}
