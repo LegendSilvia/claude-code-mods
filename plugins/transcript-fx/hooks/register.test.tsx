@@ -194,3 +194,22 @@ test('a header still draws, with the path as given, when the cwd cannot be read'
   const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolUse', props: USE })
   expect(await ui.find({ type: 'Text', text: '/p/docs/plan.md' })).toBeDefined()
 })
+
+const MSG = (kind: string) => ({ text: '/pokemon size large', origin: { kind }, isExpanded: true }) as any
+
+test('a typed prompt draws in a teal panel with a you tag and a right rainbow edge', async ($, on) => {
+  engineDraws(on, 'UserMessage')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'UserMessage', props: MSG('composer') })
+  expect(await ui.find({ type: 'Text', text: '/pokemon size large' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'you' })).toBeDefined()
+  expect(await ui.find({ type: 'Box', key: 'panel' })).toMatchObject({ props: { backgroundColor: '#12222a' } })
+  expect(await ui.find({ type: 'Box', key: 'edge-0' })).toBeDefined()
+})
+
+test('notifications and other senders keep the engine drawing', async ($, on) => {
+  engineDraws(on, 'UserMessage')
+  for (const kind of ['task-notification', 'peer', 'scheduled-trigger']) {
+    const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'UserMessage', props: MSG(kind) })
+    expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
+  }
+})

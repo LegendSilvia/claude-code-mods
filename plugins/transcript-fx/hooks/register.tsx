@@ -240,4 +240,30 @@ export const register: Register = on => {
       return next(e)
     }
   })
+
+  on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
+    // the person typing, at the terminal or through Remote Control; every other sender keeps its row
+    const mine = e.props.origin.kind === 'composer' || e.props.origin.kind === 'bridge'
+    if (e.surface !== 'terminal' || !mine || !(await isOn($, 'prompts'))) return next(e)
+    try {
+      const { Box, Text } = $.ui.resolve(e)
+      const n = edgeSegments(e.props.text, e.viewport?.columns ?? 100)
+      // violet at the top to red at the bottom, mirroring the replies' edge
+      const colors = Array.from({ length: n }, (_, i) => rainbow(300 - (i / Math.max(1, n - 1)) * 300))
+      return (
+        <Box flexDirection="row">
+          <Box key="panel" flexGrow={1} flexDirection="row" backgroundColor={TEAL_TINT} paddingX={1} gap={1}>
+            <Box flexGrow={1}>
+              <Text>{e.props.text}</Text>
+            </Box>
+            <Text dimColor>you</Text>
+          </Box>
+          <Box width={1} flexShrink={0} />
+          {edge(Box, colors, 'right')}
+        </Box>
+      )
+    } catch {
+      return next(e)
+    }
+  })
 }
