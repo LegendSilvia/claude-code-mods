@@ -148,10 +148,11 @@ export function parseFx(args: string): { kind: 'show' } | { kind: 'set'; part: P
 }
 
 const settings = atom({ plugin: 'transcript-fx', key: 'settings' } as const, DEFAULTS)
-// when the last main-loop turn ended; written at turn.complete, since drawing may not write state
-const lastEnd = atom({ plugin: 'transcript-fx', key: 'lastEnd' } as const, null as number | null)
-// a footer first drawn this long after a turn ended is an older one: it shows no time rather than a wrong one
+// when the last main-loop turn ended and how long it ran; written at turn.complete, since drawing may not write state
+const lastEnd = atom({ plugin: 'transcript-fx', key: 'lastEnd' } as const, null as { at: number; durationMs: number } | null)
+// a footer is that turn's when it is first drawn soon after and its duration matches; any other shows no time
 const FRESH_MS = 10_000
+const SAME_TURN_MS = 2_000
 const USAGE = `Usage: /fx [${PARTS.join('|')}] [on|off]`
 
 const isOn = async ($: EngineInterface, part: Part) => (await read($, settings))[part]
@@ -184,29 +185,41 @@ const status = (p: { isRunning: boolean; isErrored: boolean; isInterrupted: bool
         : { glyph: '✓', color: OK, dim: false }
 
 export const register: Register = on => {
-  // each footer's end time; a reload starts it over, and older footers then show no time
-  const footerAt = new Map<string, number>()
+  // each footer's end time, null for one that is not the last turn's; a reload starts it over
+  const footerAt = new Map<string, number | null>()
   // spinners on screen, repainted in place each frame without a render pass
   const spinners = new Set<string>()
+  // tool calls drawn as rows of an expanded group, which show their results inline
+  const inExpandedGroup = new Set<string>()
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
       const now = await $.clock.now()
-      await update($, lastEnd, () => now)
+      await update($, lastEnd, () => ({ at: now, durationMs: e.durationMs }))
     }
     return next(e)
   })
 
   on('session.start', async ($, e, next) => {
-    const saved = await $.store.get('settings')
-    if (saved && typeof saved === 'object') await update($, settings, () => ({ ...DEFAULTS, ...(saved as Partial<Settings>) }))
-    await $.command.register({ name: 'fx', description: 'Show or toggle transcript-fx parts' })
     $.clock.every(FRAME_MS, async () => {
       if (spinners.size === 0) return
       const cells = barCells(await $.clock.now())
-      // a spinner that is gone refuses the blit and leaves the set
-      for (const requestId of spinners) void $.ui.blit({ requestId, key: 'bar', cells }).catch(() => spinners.delete(requestId))
+      // a spinner that is gone answers { deny } and leaves the set; its next drawing adds it back
+      for (const requestId of spinners)
+        void $.ui
+          .blit({ requestId, key: 'bar', cells })
+          .then(r => {
+            if (r.deny !== undefined) spinners.delete(requestId)
+          })
+          .catch(() => spinners.delete(requestId))
     })
+    try {
+      const saved = await $.store.get('settings')
+      if (saved && typeof saved === 'object') await update($, settings, () => ({ ...DEFAULTS, ...(saved as Partial<Settings>) }))
+      await $.command.register({ name: 'fx', description: 'Show or toggle transcript-fx parts' })
+    } catch {
+      // the defaults stand; the session goes on
+    }
     return next(e)
   })
 
@@ -224,7 +237,8 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
-    if (e.surface !== 'terminal' || !(await isOn($, 'tools'))) return next(e)
+    // a row of an expanded group draws its result inline: the engine's row keeps it
+    if (e.surface !== 'terminal' || inExpandedGroup.has(e.props.tool_use_id) || !(await isOn($, 'tools'))) return next(e)
     try {
       const { Box, Text } = $.ui.resolve(e)
       const label = toolLabel(e.props.tool)
@@ -239,11 +253,14 @@ export const register: Register = on => {
           <Box width={1} flexShrink={0} />
           <Box flexGrow={1} flexDirection="row" gap={1} paddingX={1}>
             <Text color={GOLD}>{iconFor(e.props.tool)}</Text>
-            <Text bold color={GOLD}>
+            {/* the viewport is the window's width, not the transcript column's: the layout clips at the real one */}
+            <Text bold color={GOLD} wrap="truncate-end">
               {label}
             </Text>
             <Box flexGrow={1}>
-              <Text dimColor>{summary}</Text>
+              <Text dimColor wrap="truncate-end">
+                {summary}
+              </Text>
             </Box>
             <Text color={s.color} dimColor={s.dim}>
               {s.glyph}
@@ -278,6 +295,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
+    if (e.props.isExpanded) for (const c of e.props.calls) if (c.tool_use_id !== undefined) inExpandedGroup.add(c.tool_use_id)
     if (e.surface !== 'terminal' || e.props.isExpanded || !(await isOn($, 'tools'))) return next(e)
     try {
       const { Box, Text } = $.ui.resolve(e)
@@ -351,7 +369,8 @@ export const register: Register = on => {
     if (e.surface !== 'terminal' || !isFree || !(await isOn($, 'rule'))) return drawn
     try {
       const { Box, Text } = $.ui.resolve(e)
-      const width = Math.max(1, e.viewport?.columns ?? e.props.bodyColumns ?? 80)
+      // the band's body, which a docked pane narrows below the window's width
+      const width = Math.max(1, e.props.bodyColumns || e.viewport?.columns || 80)
       return (
         <Box key="rule" flexDirection="row">
           {Array.from({ length: width }, (_, i) => (
@@ -370,12 +389,14 @@ export const register: Register = on => {
     if (e.surface !== 'terminal' || !(await isOn($, 'footer'))) return next(e)
     try {
       const { Box, Text } = $.ui.resolve(e)
-      // the first drawing takes the turn's end time, kept here so a later redraw shows the same
+      // the first drawing decides once: the last turn's end time, or none, so a later turn never restamps it
       if (!footerAt.has(e.requestId)) {
         const end = await read($, lastEnd)
-        if (end !== null && (await $.clock.now()) - end < FRESH_MS) footerAt.set(e.requestId, end)
+        const isThisTurn =
+          end !== null && (await $.clock.now()) - end.at < FRESH_MS && Math.abs(end.durationMs - e.props.durationMs) < SAME_TURN_MS
+        footerAt.set(e.requestId, isThisTurn ? end.at : null)
       }
-      const at = footerAt.get(e.requestId)
+      const at = footerAt.get(e.requestId) ?? null
       const word = e.props.word.toLowerCase()
       return (
         <Box flexDirection="row" gap={1}>
@@ -387,7 +408,7 @@ export const register: Register = on => {
               </Text>
             ))}
           </Text>
-          <Text dimColor>{`in ${fmtDuration(e.props.durationMs)}${at === undefined ? '' : ` · ${fmtClock(at)}`}`}</Text>
+          <Text dimColor>{`in ${fmtDuration(e.props.durationMs)}${at === null ? '' : ` · ${fmtClock(at)}`}`}</Text>
         </Box>
       )
     } catch {

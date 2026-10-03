@@ -3,6 +3,6 @@ export type Settings = Record<Part, boolean>
 
 declare module 'claude-code' {
   interface PluginState {
-    'transcript-fx': { settings: Settings; lastEnd: number | null }
+    'transcript-fx': { settings: Settings; lastEnd: { at: number; durationMs: number } | null }
   }
 }

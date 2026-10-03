@@ -69,7 +69,7 @@ Palette: replies stay rainbow on violet (reply-highlight); tools are gold; promp
   Grep `"pattern"` plus ` in <path>` when given, Glob `pattern`, `url`, `query`, `description`,
   `skill`; otherwise empty.
 - Status at the right: ◐ running, ✓ done (green), ✗ errored (red), ⊘ interrupted (dim).
-- A row inside an expanded group draws the same header.
+- A row inside an expanded group keeps the engine drawing, since it shows its result inline there.
 
 ### Tool result (`ToolResult`, wrapped)
 
@@ -102,7 +102,7 @@ paints its bars, so frames cost no render pass. The timer only blits while a spi
 `✦ baked in 2m 50s · 3:42 PM` — `✦` violet, the word lower-cased and run through the rainbow,
 duration formatted like the engine (`3s`, `1m 4s`, `1h 2m`), then the local time the turn ended.
 Drawing may not write `$.state`, so `turn.complete` (main loop) records the end time in `lastEnd`.
-A footer first drawn within 10 s of it takes that time and keeps it (module-local, per `requestId`)
+A footer first drawn within 10 s of it, with a duration within 2 s of that turn's, takes that time and keeps it (module-local, per `requestId`)
 across redraws; a footer first drawn later, such as one already on screen when the plugin reloads,
 shows its duration with no time rather than a wrong one.
 
@@ -137,12 +137,12 @@ export type Part = 'tools' | 'spinner' | 'prompts' | 'footer' | 'rule'
 export type Settings = Record<Part, boolean>
 declare module 'claude-code' {
   interface PluginState {
-    'transcript-fx': { settings: Settings; lastEnd: number | null }
+    'transcript-fx': { settings: Settings; lastEnd: { at: number; durationMs: number } | null }
   }
 }
 ```
 
-`lastEnd` is the clock time the last main-loop turn ended, or null before the first.
+`lastEnd` is when the last main-loop turn ended and how long it ran, or null before the first.
 
 ## Layout
 

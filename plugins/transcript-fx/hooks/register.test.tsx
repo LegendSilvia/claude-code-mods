@@ -217,15 +217,16 @@ test('notifications and other senders keep the engine drawing', async ($, on) =>
 const AT_342 = new Date(2026, 9, 3, 15, 42).getTime()
 
 // a main-loop turn ends, as the engine raises it; the test answers beneath the plugin
-const endTurn = async ($: any, on: any) => {
-  on('turn.complete', () => ({ text: '' }))
-  await $.turn.complete({ answer: '', durationMs: 1_000, isAborted: false, turnId: 'turn', reason: 'answer' })
+const answersTurns = (on: any) => on('turn.complete', () => ({ text: '' }))
+const endTurn = async ($: any, durationMs: number) => {
+  await $.turn.complete({ answer: '', durationMs, isAborted: false, turnId: 'turn', reason: 'answer' })
 }
 
 test('the footer reads star, rainbow word, duration and the time it ended', async ($, on) => {
   mock.clock(on, { now: AT_342 })
+  answersTurns(on)
   engineDraws(on, 'TurnDuration')
-  await endTurn($, on)
+  await endTurn($, 170_000)
   const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Baked', durationMs: 170_000 }, requestId: 'turn-1' })
   expect(await ui.find({ type: 'Text', text: '✦' })).toMatchObject({ props: { color: '#b388ff' } })
   expect(await ui.find({ type: 'Text', text: 'b' })).toBeDefined()
@@ -234,8 +235,9 @@ test('the footer reads star, rainbow word, duration and the time it ended', asyn
 
 test('a footer drawn again keeps its first time', async ($, on) => {
   const clock = mock.clock(on, { now: AT_342 })
+  answersTurns(on)
   engineDraws(on, 'TurnDuration')
-  await endTurn($, on)
+  await endTurn($, 3_000)
   const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Baked', durationMs: 3_000 }, requestId: 'turn-2' })
   expect(await ui.find({ type: 'Text', text: 'in 3s · 3:42 PM' })).toBeDefined()
   await clock.advance(5 * 60_000)
@@ -245,9 +247,10 @@ test('a footer drawn again keeps its first time', async ($, on) => {
 
 test('a footer with no turn just ended shows its duration and no time, never a wrong one', async ($, on) => {
   mock.clock(on, { now: AT_342 })
+  answersTurns(on)
   engineDraws(on, 'TurnDuration')
   const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Baked', durationMs: 3_000 }, requestId: 'turn-old' })
-  expect(await ui.find({ type: 'Text', text: 'in 3s' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^in 3s$/ })).toBeDefined()
 })
 
 test('the spinner bar sweeps four lit cells across ten', async () => {
@@ -292,4 +295,66 @@ test('a survey keeps the band', async ($, on) => {
   coreBand(on)
   const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, hasSurvey: true } })
   expect(await ui.find({ type: 'Box', key: 'rule' })).toBeUndefined()
+})
+
+// final review fixes
+
+test('a spinner that is gone stops the frame timer', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  fakeStore(on)
+  let blits = 0
+  on('ui.blit', () => {
+    blits++
+    return { deny: 'not mounted' }
+  })
+  on('session.start', ($: any, e: any) => ({ cwd: e.cwd }))
+  engineDraws(on, 'Spinner')
+  await $.session.start({ cwd: '/p', surface: 'terminal', isInteractive: true })
+  await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'Spinner', props: { word: 'Baking', message: null, suffix: '…', mode: 'responding' } })
+  await clock.advance(80)
+  await clock.advance(800)
+  expect(blits).toBe(1)
+})
+
+test('an older footer never takes a later turn’s time', async ($, on) => {
+  mock.clock(on, { now: AT_342 })
+  answersTurns(on)
+  engineDraws(on, 'TurnDuration')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Baked', durationMs: 3_000 }, requestId: 'turn-resumed' })
+  await endTurn($, 3_000)
+  await ui.redraw()
+  expect(await ui.find({ type: 'Text', text: /^in 3s$/ })).toBeDefined()
+})
+
+test('a footer takes a turn’s time only when the durations match', async ($, on) => {
+  mock.clock(on, { now: AT_342 })
+  answersTurns(on)
+  engineDraws(on, 'TurnDuration')
+  await endTurn($, 60_000)
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Baked', durationMs: 3_000 }, requestId: 'turn-other' })
+  expect(await ui.find({ type: 'Text', text: /^in 3s$/ })).toBeDefined()
+})
+
+test('rows of an expanded group keep the engine drawing, with their results', async ($, on) => {
+  engineDraws(on, 'ToolGroup')
+  engineDraws(on, 'ToolUse')
+  const calls = [{ tool_use_id: 'g1', tool: 'Read', input: {}, isRunning: false, isErrored: false }]
+  await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolGroup', props: { calls, isActive: false, isExpanded: true } as any })
+  const row = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolUse', props: { ...USE, tool_use_id: 'g1', tool: 'Read' }, requestId: 'g1' })
+  expect(await row.find({ type: 'Text', text: 'engine' })).toBeDefined()
+})
+
+test('the header label and summary clip at the real width rather than wrap', async ($, on) => {
+  inProject(on)
+  engineDraws(on, 'ToolUse')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolUse', props: USE })
+  expect(await ui.find({ type: 'Text', text: 'docs/plan.md' })).toMatchObject({ props: { wrap: 'truncate-end' } })
+  expect(await ui.find({ type: 'Text', text: 'Write' })).toMatchObject({ props: { wrap: 'truncate-end' } })
+})
+
+test('the rule spans the band body, not the whole window', async ($, on) => {
+  coreBand(on)
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 70 }, viewport: { columns: 120, rows: 30 } })
+  const rule = (await ui.find({ type: 'Box', key: 'rule' })) as { children?: unknown[] } | undefined
+  expect(rule?.children?.length).toBe(70)
 })
