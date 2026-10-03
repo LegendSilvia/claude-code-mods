@@ -116,6 +116,33 @@ const USAGE = `Usage: /fx [${PARTS.join('|')}] [on|off]`
 
 const isOn = async ($: EngineInterface, part: Part) => (await read($, settings))[part]
 
+// how many slices an edge gets: the layout shares the block's real height among them
+export const edgeSegments = (text: string, columns: number) => {
+  const width = Math.max(10, columns - 6)
+  const rows = text.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil([...l].length / width)), 0) + 2
+  return Math.min(48, Math.max(6, rows))
+}
+
+// a 1-column edge laid over the row's first (or last) column, so it never adds height
+function edge(Box: any, colors: string[], side: 'left' | 'right') {
+  return (
+    <Box position="absolute" top={0} bottom={0} {...(side === 'left' ? { left: 0 } : { right: 0 })} width={1} flexDirection="column" overflow="hidden">
+      {colors.map((c, i) => (
+        <Box key={`edge-${i}`} flexGrow={1} backgroundColor={c} />
+      ))}
+    </Box>
+  )
+}
+
+const status = (p: { isRunning: boolean; isErrored: boolean; isInterrupted: boolean }) =>
+  p.isInterrupted
+    ? { glyph: '⊘', color: undefined, dim: true }
+    : p.isErrored
+      ? { glyph: '✗', color: ERR, dim: false }
+      : p.isRunning
+        ? { glyph: '◐', color: GOLD, dim: false }
+        : { glyph: '✓', color: OK, dim: false }
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const saved = await $.store.get('settings')
@@ -135,5 +162,82 @@ export const register: Register = on => {
     }
     const s = await read($, settings)
     return { text: PARTS.map(p => `${p}: ${s[p] ? 'on' : 'off'}`).join(' · ') }
+  })
+
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    if (e.surface !== 'terminal' || !(await isOn($, 'tools'))) return next(e)
+    try {
+      const { Box, Text } = $.ui.resolve(e)
+      const label = toolLabel(e.props.tool)
+      const room = (e.viewport?.columns ?? 100) - label.length - 10
+      // an unknown cwd only costs the relative paths, never the row
+      const cwd = await $.session.cwd().catch(() => '')
+      const summary = truncate(summarize(e.props.tool, e.props.input, cwd), room)
+      const s = status(e.props)
+      return (
+        <Box flexDirection="row">
+          {edge(Box, goldEdge(2), 'left')}
+          <Box width={1} flexShrink={0} />
+          <Box flexGrow={1} flexDirection="row" gap={1} paddingX={1}>
+            <Text color={GOLD}>{iconFor(e.props.tool)}</Text>
+            <Text bold color={GOLD}>
+              {label}
+            </Text>
+            <Box flexGrow={1}>
+              <Text dimColor>{summary}</Text>
+            </Box>
+            <Text color={s.color} dimColor={s.dim}>
+              {s.glyph}
+            </Text>
+          </Box>
+        </Box>
+      )
+    } catch {
+      return next(e)
+    }
+  })
+
+  on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
+    if (e.surface !== 'terminal' || !(await isOn($, 'tools'))) return next(e)
+    // drawn once, so a failure below hands back this tree rather than calling next again
+    const drawn = await next(e)
+    try {
+      const { Box } = $.ui.resolve(e)
+      const text = typeof e.props.output === 'string' ? e.props.output : JSON.stringify(e.props.output ?? '')
+      return (
+        <Box flexDirection="row">
+          {edge(Box, goldEdge(edgeSegments(text, e.viewport?.columns ?? 100)), 'left')}
+          <Box width={1} flexShrink={0} />
+          <Box flexGrow={1} flexDirection="column" backgroundColor={GOLD_TINT} paddingX={1}>
+            {drawn}
+          </Box>
+        </Box>
+      )
+    } catch {
+      return drawn
+    }
+  })
+
+  on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
+    if (e.surface !== 'terminal' || e.props.isExpanded || !(await isOn($, 'tools'))) return next(e)
+    try {
+      const { Box, Text } = $.ui.resolve(e)
+      const first = e.props.calls[0]?.tool ?? ''
+      return (
+        <Box flexDirection="row">
+          {edge(Box, goldEdge(2), 'left')}
+          <Box width={1} flexShrink={0} />
+          <Box flexGrow={1} flexDirection="row" gap={1} paddingX={1}>
+            <Text color={GOLD}>{iconFor(first)}</Text>
+            <Box flexGrow={1}>
+              <Text color={GOLD}>{groupLine(e.props.calls)}</Text>
+            </Box>
+            {e.props.isActive ? <Text color={GOLD}>◐</Text> : null}
+          </Box>
+        </Box>
+      )
+    } catch {
+      return next(e)
+    }
   })
 }

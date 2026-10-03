@@ -115,3 +115,82 @@ test('/fx with bad arguments answers the usage and changes nothing', async $ => 
   }
   expect((await $.command.run({ command: 'fx', ...RUN })).text).not.toContain(': off')
 })
+
+const engineDraws = (on: any, component: string) =>
+  on('ui.render', { component }, ($: any, e: any) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+
+// the session's working directory, which a header's paths are relative to
+const inProject = (on: any) => on('session.cwd', () => ({ value: '/p' }))
+
+const USE = { tool_use_id: 't1', tool: 'Write', input: { file_path: '/p/docs/plan.md' }, isRunning: false, isErrored: false, isInterrupted: false }
+
+test('a tool header draws icon, name, summary and status in gold', async ($, on) => {
+  inProject(on)
+  engineDraws(on, 'ToolUse')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolUse', props: USE, viewport: { columns: 100, rows: 40 } })
+  expect(await ui.find({ type: 'Text', text: '✎' })).toMatchObject({ props: { color: '#f5c542' } })
+  expect(await ui.find({ type: 'Text', text: 'Write' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /plan\.md/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '✓' })).toMatchObject({ props: { color: '#30a46c' } })
+  expect(await ui.find({ type: 'Text', text: 'engine' })).toBeUndefined()
+})
+
+test('running, errored and interrupted calls show their own status', async ($, on) => {
+  inProject(on)
+  engineDraws(on, 'ToolUse')
+  const cases = [
+    [{ isRunning: true }, '◐'],
+    [{ isErrored: true }, '✗'],
+    [{ isInterrupted: true, isErrored: true }, '⊘'],
+  ] as const
+  for (const [flags, glyph] of cases) {
+    const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolUse', props: { ...USE, ...flags } })
+    expect(await ui.find({ type: 'Text', text: glyph })).toBeDefined()
+  }
+})
+
+test('a long multi-line command stays one row', async ($, on) => {
+  inProject(on)
+  engineDraws(on, 'ToolUse')
+  const command = `${'x'.repeat(300)}\nsecond line`
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolUse', props: { ...USE, tool: 'Bash', input: { command } }, viewport: { columns: 80, rows: 40 } })
+  const summary = await ui.find({ type: 'Text', text: /^x+…$/ })
+  expect(summary).toBeDefined()
+  expect([...summary!.text].length).toBeLessThan(80)
+  expect(await ui.find({ type: 'Text', text: /second line/ })).toBeUndefined()
+})
+
+test('a tool result keeps the engine drawing inside a gold-edged panel', async ($, on) => {
+  engineDraws(on, 'ToolResult')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolResult', props: { tool_use_id: 't1', tool: 'Write', output: {}, isErrored: false } })
+  expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
+  expect(await ui.find({ type: 'Box', key: 'edge-0' })).toMatchObject({ props: { backgroundColor: '#ffd86b' } })
+})
+
+test('a folded group draws one gold count line; an expanded one passes', async ($, on) => {
+  engineDraws(on, 'ToolGroup')
+  const calls = [{ tool: 'Read' }, { tool: 'Read' }, { tool: 'Grep' }]
+  const folded = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolGroup', props: { calls, isActive: false, isExpanded: false } as any })
+  expect(await folded.find({ type: 'Text', text: 'Read ×2 · Grep' })).toBeDefined()
+  const open = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolGroup', props: { calls, isActive: false, isExpanded: true } as any })
+  expect(await open.find({ type: 'Text', text: 'engine' })).toBeDefined()
+})
+
+test('tools pass on the desktop and when turned off', async ($, on) => {
+  fakeStore(on)
+  engineDraws(on, 'ToolUse')
+  const desk = await $.ui.mount({ plugin: 'transcript-fx', surface: 'desktop', component: 'ToolUse', props: USE })
+  expect(await desk.find({ type: 'Text', text: 'engine' })).toBeDefined()
+  await $.command.run({ command: 'fx', ...RUN, args: 'tools off' })
+  const term = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolUse', props: USE })
+  expect(await term.find({ type: 'Text', text: 'engine' })).toBeDefined()
+})
+
+test('a header still draws, with the path as given, when the cwd cannot be read', async ($, on) => {
+  engineDraws(on, 'ToolUse')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'ToolUse', props: USE })
+  expect(await ui.find({ type: 'Text', text: '/p/docs/plan.md' })).toBeDefined()
+})
