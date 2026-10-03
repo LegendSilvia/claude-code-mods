@@ -424,7 +424,7 @@ export const register: Register = on => {
       spinners.add(e.requestId)
       return (
         // pinned to the bottom of the block, beside the spinner line and its tip; the block grows no taller
-        <Box key="spinner" flexDirection="row" gap={1} alignItems="flex-end">
+        <Box key="spinner" flexDirection="row" gap={1} alignItems="flex-end" marginTop={1}>
           <Raster key="ring" columns={RING_W} rows={RING_H} cells={ringCells(await $.clock.now())} />
           {drawn}
         </Box>
@@ -476,7 +476,8 @@ export const register: Register = on => {
       const at = footerAt.get(e.requestId) ?? null
       const word = e.props.word.toLowerCase()
       return (
-        <Box flexDirection="row" gap={1}>
+        // a blank line from the reply above; the star lines up with the one that opens replies
+        <Box key="footer" flexDirection="row" gap={1} marginTop={1} paddingLeft={2}>
           <Text color={VIOLET}>✦</Text>
           <Text bold>
             {[...word].map((ch, i) => (

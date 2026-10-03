@@ -421,3 +421,18 @@ test('the box sides never set its height: they lie over the rows the text and pa
     expect(await ui.find({ type: 'Box', key })).toMatchObject({ props: { position: 'absolute', top: 0, bottom: 0 } })
   }
 })
+
+test('the footer has a blank line above it and lines its star up with the replies', async ($, on) => {
+  mock.clock(on, { now: AT_342 })
+  answersTurns(on)
+  engineDraws(on, 'TurnDuration')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'TurnDuration', props: { word: 'Churned', durationMs: 26_000 }, requestId: 'turn-pad' })
+  expect(await ui.find({ type: 'Box', key: 'footer' })).toMatchObject({ props: { marginTop: 1, paddingLeft: 2 } })
+})
+
+test('the spinner has a blank line above it', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  engineDraws(on, 'Spinner')
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'Spinner', props: { word: 'Slithering', message: null, suffix: '…', mode: 'responding' } })
+  expect(await ui.find({ type: 'Box', key: 'spinner' })).toMatchObject({ props: { marginTop: 1 } })
+})
