@@ -44,6 +44,7 @@ Restart Claude Code. If you use a `statusLine` command in `settings.json` that s
 | `/progress-demo` | Run a sample plan |
 | `/progress-sounds` | Play the decision, error and done sounds |
 | `/progress-clear` | Remove all bars |
+| `/progress-debug` | Show the widths the bars were laid out by (the terminal's, and what the prompt line was told) |
 
 ### transcript-fx commands
 

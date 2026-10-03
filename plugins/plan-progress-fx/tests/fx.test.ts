@@ -215,3 +215,17 @@ test('/progress-demo run twice keeps one step every 900 ms', async ($, on) => {
   await clock.advance(900)
   expect(await ui.find({ type: 'Text', text: /38%$/ })).toBeDefined()
 })
+
+test('/progress-debug shows the width the prompt line was told beside the terminal width', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  on('ui.render', { component: 'PromptHint' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return h(Text, { dimColor: true }, '? for shortcuts') as RenderElement
+  })
+  await $.command.run({ command: 'progress-demo', ...RUN })
+  await $.ui.mount({ plugin: 'plan-progress-fx', surface: 'terminal', component: 'PromptHint', props: HINT, viewport: { columns: 112, rows: 50 } })
+  const { text } = await $.command.run({ command: 'progress-debug', ...RUN, presentation: { isFullscreen: true, columns: 208 } })
+  expect(text).toContain('terminal: 208 columns')
+  expect(text).toContain('prompt line told: 112 columns')
+  expect(text).toMatch(/laid out: (wide|narrow)/)
+})

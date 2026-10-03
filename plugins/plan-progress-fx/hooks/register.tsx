@@ -474,6 +474,8 @@ const isWide = (list: Plan[], cols: number) => {
 let band: { requestId: string; bars: { key: string; plan: Plan; cols: number }[] } | null = null
 // whether the terminal last laid the bars out narrow, where narrowOpen shows them, not isOpen
 let isNarrowLine = false
+// what the prompt line was last told and laid out by, for /progress-debug
+let lineSeen: { told: number | undefined; cols: number; wide: boolean } | null = null
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const easeOut = (k: number) => 1 - Math.pow(1 - clamp01(k), 3)
@@ -932,6 +934,7 @@ export const register: Register = on => {
     await $.command.register({ name: 'progress-demo', description: 'Show a sample plan in the progress bars' })
     await $.command.register({ name: 'progress-sounds', description: 'Play the decision, error and done sounds' })
     await $.command.register({ name: 'progress-clear', description: 'Remove all progress bars' })
+    await $.command.register({ name: 'progress-debug', description: 'Show the widths the progress bars were laid out by' })
 
     return next(e)
   })
@@ -1024,6 +1027,19 @@ export const register: Register = on => {
     return { text: 'Progress bars removed.' }
   })
 
+  // what the bars' width went by, beside the terminal's own: the evidence for a wrong fold
+  on('command.run', { command: 'progress-debug' }, async (_$, e) => {
+    const s = lineSeen
+    return {
+      text: [
+        `terminal: ${e.presentation.columns} columns${e.presentation.isFullscreen ? ', fullscreen' : ''}`,
+        `prompt line told: ${s?.told === undefined ? 'nothing' : `${s.told} columns`}`,
+        `used: ${s ? `${s.cols} columns` : 'not drawn yet'}, docked pane: ${dock ? `${dock.full} wide, body ${dock.body}` : 'none seen'}`,
+        `laid out: ${s ? (s.wide ? 'wide' : 'narrow') : 'not drawn yet'}`,
+      ].join('\n'),
+    }
+  })
+
   on('command.run', { command: 'progress-sounds' }, async $ => {
     play($, 'decision')
     $.clock.after(900, () => play($, 'error'))
@@ -1086,7 +1102,10 @@ export const register: Register = on => {
     const Raster = e.surface === 'terminal' && 'Raster' in t ? t.Raster : null
     const cols = lineColumns(e.viewport?.columns ?? 100, dock)
     const wide = isWide(list, cols)
-    if (e.surface === 'terminal') isNarrowLine = !wide
+    if (e.surface === 'terminal') {
+      isNarrowLine = !wide
+      lineSeen = { told: e.viewport?.columns, cols, wide }
+    }
     if (!Raster || list.length === 0 || !(wide ? await read($, isOpen) : await read($, narrowOpen))) {
       if (e.surface === 'terminal') band = null
       return next(e)
