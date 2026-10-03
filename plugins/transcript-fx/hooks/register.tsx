@@ -102,8 +102,8 @@ export function fmtClock(ms: number): string {
   return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
 }
 
-const FRAME_MS = 80
-const STEP_MS = 100
+export const FRAME_MS = 160
+const STEP_MS = FRAME_MS
 const DEFAULT_BG = 0x01000000
 
 // a rounded 4×2 square; the ring runs clockwise: top left→right, then bottom right→left

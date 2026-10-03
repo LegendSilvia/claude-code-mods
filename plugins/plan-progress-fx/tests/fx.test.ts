@@ -229,3 +229,26 @@ test('/progress-debug shows the width the prompt line was told beside the termin
   expect(text).toContain('prompt line told: 112 columns')
   expect(text).toMatch(/laid out: (wide|narrow)/)
 })
+
+test('a moving bar repaints about 10 times a second, not more', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  on('ui.render', { component: 'PromptHint' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return h(Text, { dimColor: true }, '? for shortcuts') as RenderElement
+  })
+  let blits = 0
+  on('ui.blit', () => {
+    blits++
+    return {}
+  })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('tool.register', ($, e) => ({ value: { tool: e.name } }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  await $.session.start({ cwd: '/p', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'progress-demo', ...RUN })
+  await $.ui.mount({ plugin: 'plan-progress-fx', surface: 'terminal', component: 'PromptHint', props: HINT, viewport: { columns: 200, rows: 50 } })
+  blits = 0
+  await clock.advance(1000)
+  expect(blits).toBeGreaterThan(0)
+  expect(blits).toBeLessThanOrEqual(11)
+})

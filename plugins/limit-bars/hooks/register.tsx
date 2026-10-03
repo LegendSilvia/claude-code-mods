@@ -19,7 +19,7 @@ const HOT = [255, 70, 70]
 const TRACK = [58, 58, 66]
 const WHITE = [255, 255, 255]
 const DEFAULT_BG = 0x01000000
-const FPS_MS = 80
+const FPS_MS = 250
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
 // which window feeds which limit ring: five_hour, seven_day, then the model's own weekly window

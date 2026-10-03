@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { DEFAULTS, GOLD_HI, GOLD_LO, fmtClock, fmtDuration, goldEdge, groupLine, iconFor, parseFx, rainbow, relPath, ringCells, ringFrame, ringHead, ringLevels, summarize, toolLabel, truncate } from './register'
+import { DEFAULTS, FRAME_MS, GOLD_HI, GOLD_LO, fmtClock, fmtDuration, goldEdge, groupLine, iconFor, parseFx, rainbow, relPath, ringCells, ringFrame, ringHead, ringLevels, summarize, toolLabel, truncate } from './register'
 
 const RUN = { args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 200 } }
 
@@ -276,13 +276,13 @@ test('the ring is a rounded 4×2 square whose glyphs never change', async () => 
 
 test('the head steps clockwise around the eight border cells and wraps', async () => {
   // ring order: top left→right, then bottom right→left
-  expect([0, 1, 2, 3, 4, 5, 6, 7, 8].map(i => ringHead(i * 100))).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 0])
+  expect([0, 1, 2, 3, 4, 5, 6, 7, 8].map(i => ringHead(i * FRAME_MS))).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 0])
 })
 
 test('the trail fades behind the head and the rest stays dim', async () => {
-  expect(ringLevels(300)).toEqual([0.25, 0.45, 0.7, 1, 0.12, 0.12, 0.12, 0.12])
+  expect(ringLevels(3 * FRAME_MS)).toEqual([0.25, 0.45, 0.7, 1, 0.12, 0.12, 0.12, 0.12])
   // the trail wraps from the first cell back to the last ones
-  expect(ringLevels(100)).toEqual([0.7, 1, 0.12, 0.12, 0.12, 0.12, 0.25, 0.45])
+  expect(ringLevels(FRAME_MS)).toEqual([0.7, 1, 0.12, 0.12, 0.12, 0.12, 0.25, 0.45])
 })
 
 test('the brightest cell follows the head across both rows', async () => {
@@ -293,8 +293,8 @@ test('the brightest cell follows the head across both rows', async () => {
   }
   // ring position 0 is row-major cell 0; position 4 is the bottom-right cell, row-major 7
   expect(brightest(0)).toBe(0)
-  expect(brightest(400)).toBe(7)
-  expect(brightest(700)).toBe(4)
+  expect(brightest(4 * FRAME_MS)).toBe(7)
+  expect(brightest(7 * FRAME_MS)).toBe(4)
 })
 
 test('a ring frame is 8 cells of Raster data', async () => {
@@ -466,4 +466,9 @@ test('a folded group of one call shows what it ran and how it ended', async ($, 
   expect(await ui.find({ type: 'Text', text: 'PowerShell' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'ollama ps' })).toMatchObject({ props: { wrap: 'truncate-end' } })
   expect(await ui.find({ type: 'Text', text: '✓' })).toBeDefined()
+})
+
+test('the spinner square repaints about 6 times a second and its comet moves one cell a frame', () => {
+  expect(FRAME_MS).toBeGreaterThanOrEqual(160)
+  expect(ringHead(FRAME_MS) - ringHead(0)).toBe(1)
 })

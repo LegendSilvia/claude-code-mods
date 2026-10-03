@@ -144,3 +144,11 @@ test('the rings animate while Claude works', async ($, on) => {
   await clock.advance(1000)
   expect(blits.length).toBeGreaterThan(0)
 })
+
+test('while Claude works the four rings repaint about 4 times a second, not more', async ($, on) => {
+  const { clock, blits } = await started($, on)
+  await $.ui.mount(hint(true))
+  await clock.advance(2000)
+  expect(blits.length).toBeGreaterThan(0)
+  expect(blits.length).toBeLessThanOrEqual(4 * 4 * 2)
+})

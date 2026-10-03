@@ -412,7 +412,7 @@ function stripsSvg(v: { shown: AgentRun[]; hidden: AgentRun[] }, W: number, now:
 // ---------- terminal: an animated pixel bar on a Raster, repainted by blit ----------
 // each cell is '▀' with its own top (fg) and bottom (bg) colour, so one row reads as two rows of pixels
 
-const FPS_MS = 33
+const FPS_MS = 100
 const GLIDE_MS = 500
 const BURST_MS = 1600
 const SHIMMER_MS = 1700
