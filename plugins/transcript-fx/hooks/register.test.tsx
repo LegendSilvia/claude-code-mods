@@ -266,3 +266,30 @@ test('the spinner keeps the engine line beside the bar', async ($, on) => {
   expect(await ui.find({ type: 'Raster', key: 'bar' })).toMatchObject({ props: { columns: 10, rows: 1 } })
   expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
 })
+
+const BAND = { hasSurvey: false, isWorking: true, maxRows: 10, bodyColumns: 40, scroll: { offset: 0, bodyRows: 10 }, view: {} }
+
+// the engine's own band, as core answers next(e): its drawing by reference
+const coreBand = (on: any) => on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'engine', ref: 0 }))
+
+test('the rule draws across the band when nothing else uses it', async ($, on) => {
+  coreBand(on)
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'AbovePrompt', props: BAND, viewport: { columns: 40, rows: 30 } })
+  expect(await ui.find({ type: 'Box', key: 'rule' })).toBeDefined()
+})
+
+test("another plugin's band and a survey are left alone", async ($, on) => {
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>battle</Text>
+  })
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  expect(await ui.find({ type: 'Text', text: 'battle' })).toBeDefined()
+  expect(await ui.find({ type: 'Box', key: 'rule' })).toBeUndefined()
+})
+
+test('a survey keeps the band', async ($, on) => {
+  coreBand(on)
+  const ui = await $.ui.mount({ plugin: 'transcript-fx', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, hasSurvey: true } })
+  expect(await ui.find({ type: 'Box', key: 'rule' })).toBeUndefined()
+})

@@ -344,6 +344,28 @@ export const register: Register = on => {
     }
   })
 
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const drawn = await next(e)
+    // free only when core draws its own band and no survey is up; another plugin's band (pokecli's battle) stays
+    const isFree = (drawn as { type?: string }).type === 'engine' && !e.props.hasSurvey
+    if (e.surface !== 'terminal' || !isFree || !(await isOn($, 'rule'))) return drawn
+    try {
+      const { Box, Text } = $.ui.resolve(e)
+      const width = Math.max(1, e.viewport?.columns ?? e.props.bodyColumns ?? 80)
+      return (
+        <Box key="rule" flexDirection="row">
+          {Array.from({ length: width }, (_, i) => (
+            <Text key={`r-${i}`} color={rainbow((i / Math.max(1, width - 1)) * 300)}>
+              ─
+            </Text>
+          ))}
+        </Box>
+      )
+    } catch {
+      return drawn
+    }
+  })
+
   on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
     if (e.surface !== 'terminal' || !(await isOn($, 'footer'))) return next(e)
     try {
